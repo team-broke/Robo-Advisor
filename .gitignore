@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# 가상환경
+.venv/
+venv/
+env/
+
+# 환경변수 / 비밀정보
+.env
+.env.*
+!.env.example
+
+# 데이터 (원본·가공 모두 재현 스크립트로 생성)
+data/raw/
+data/processed/
+data/vectorstore/
+
+# 학습 산출물
+models/
+artifacts/
+mlruns/
+*.zip
+*.pkl
+
+# 테스트 / 캐시
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# 노트북
+.ipynb_checkpoints/
+
+# OS / 에디터
+.DS_Store
+.idea/
+.vscode/

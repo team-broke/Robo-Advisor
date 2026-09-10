@@ -1,0 +1,48 @@
+[project]
+name = "robo-advisor"
+version = "0.1.0"
+description = "강화학습 동적 자산배분과 LLM 에이전틱 리서치를 결합한 통합 로보어드바이저"
+requires-python = ">=3.10"
+
+# 전체 의존성 고정(requirements.lock)은 별도 작업에서 진행한다.
+# 아래 세 개는 호환성 이슈가 잦아 버전을 명시적으로 고정한다.
+dependencies = [
+    "stable-baselines3==2.3.0",
+    "shap==0.45.0",
+    "langchain>=0.2.0,<0.3.0",
+    "gymnasium",
+    "torch",
+    "numpy",
+    "pandas",
+    "scipy",
+    "statsmodels",
+    "yfinance",
+    "pykrx",
+    "langgraph",
+    "chromadb",
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "streamlit",
+    "plotly",
+    "matplotlib",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "black",
+    "flake8",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
