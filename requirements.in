@@ -1,0 +1,46 @@
+# 직접 의존성만 기술한다. 전체 해석 결과는 requirements.lock 에 있다.
+# 호환성 이슈가 잦은 세 패키지는 명세에 따라 버전을 고정한다.
+stable-baselines3==2.3.0
+shap==0.45.0
+langchain>=0.2.0,<0.3.0
+
+# 강화학습 환경
+# torch 는 CPU 전용 휠을 쓴다. 기본 인덱스는 nvidia CUDA 패키지 15개(수 GB)를 함께 끌어오는데
+# 이 프로젝트는 GPU 를 쓰지 않고, 그중 일부는 대상 플랫폼에서 지원되지 않아 pip check 가 실패한다.
+--extra-index-url https://download.pytorch.org/whl/cpu
+gymnasium
+torch
+
+# 수치·통계
+numpy
+pandas
+pyarrow
+scipy
+statsmodels
+
+# 데이터 수집
+yfinance
+
+# 에이전틱 리서치
+langchain-core
+langgraph
+langchain-community
+chromadb
+
+# 서빙
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+httpx
+
+# 대시보드
+streamlit
+plotly
+
+# 시각화
+matplotlib
+
+# 설정
+python-dotenv
+pyyaml

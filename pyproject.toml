@@ -4,8 +4,9 @@ version = "0.1.0"
 description = "강화학습 동적 자산배분과 LLM 에이전틱 리서치를 결합한 통합 로보어드바이저"
 requires-python = ">=3.10"
 
-# 전체 의존성 고정(requirements.lock)은 별도 작업에서 진행한다.
-# 아래 세 개는 호환성 이슈가 잦아 버전을 명시적으로 고정한다.
+# 아래는 직접 의존성의 제약 조건이다.
+# 전이 의존성까지 포함한 전체 고정 버전은 requirements.txt 에 있다.
+# stable-baselines3 / shap / langchain 은 호환성 이슈가 잦아 명세에 따라 범위를 고정한다.
 dependencies = [
     "stable-baselines3==2.3.0",
     "shap==0.45.0",
@@ -14,26 +15,33 @@ dependencies = [
     "torch",
     "numpy",
     "pandas",
+    "pyarrow",
     "scipy",
     "statsmodels",
     "yfinance",
-    "pykrx",
+    "langchain-core",
+    "langchain-community",
     "langgraph",
     "chromadb",
     "fastapi",
-    "uvicorn",
+    "uvicorn[standard]",
     "pydantic",
+    "pydantic-settings",
+    "httpx",
     "streamlit",
     "plotly",
     "matplotlib",
     "python-dotenv",
+    "pyyaml",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "pytest-cov",
     "black",
     "flake8",
+    "pip-tools",
 ]
 
 [build-system]
@@ -46,3 +54,7 @@ target-version = ["py310"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.flake8]
+max-line-length = 100
+extend-ignore = ["E203", "W503"]
