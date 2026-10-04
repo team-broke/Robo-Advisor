@@ -61,6 +61,4 @@ target-version = ["py310"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
-[tool.flake8]
-max-line-length = 100
-extend-ignore = ["E203", "W503"]
+# flake8 은 pyproject.toml 을 읽지 못한다. 설정은 .flake8 에 있다.
