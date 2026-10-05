@@ -2,7 +2,7 @@
 
 import numpy as np
 import pandas as pd
-import pytest
+
 
 from robo_advisor.features.indicators import calculate_macd, calculate_rsi
 
@@ -93,7 +93,16 @@ def test_rsi_does_not_reference_future_values():
 
     original = calculate_rsi(close, period=14)
 
-    # 50번째 이후의 '미래' 값만 크게 변경한다.
+    # 50번째 이후의 미래 값만 크게 변경한다.
+    changed.iloc[50:] = changed.iloc[50:] * 10.0 + 500.0
+    modified = calculate_rsi(changed, period=14)
+
+    pd.testing.assert_series_equal(
+        original.iloc[:50],
+        modified.iloc[:50],
+        check_exact=True,
+    )
+
 
 def test_macd_does_not_reference_future_values():
     """미래 가격을 바꿔도 과거 MACD와 Signal은 변하지 않아야 한다."""
