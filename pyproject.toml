@@ -60,5 +60,6 @@ target-version = ["py310"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["leakage: 미래 정보 참조 및 시점 정합성 회귀 검증"]
 
 # flake8 은 pyproject.toml 을 읽지 못한다. 설정은 .flake8 에 있다.
