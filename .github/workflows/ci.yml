@@ -3,8 +3,7 @@ name: CI
 on:
   push:
     branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
+  pull_request: {}
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -54,6 +53,11 @@ jobs:
 
       - name: 고정 버전 정합성 확인
         run: pip check
+
+      # 기존 필수 체크 "테스트" 안에서 실행하므로 누수 실패도 병합을 차단한다.
+      # pytest는 선택된 테스트가 없어도 종료 코드 5로 실패한다.
+      - name: 누수 검증
+        run: pytest -q -m leakage --strict-markers
 
       - name: pytest
         run: pytest -q --cov=robo_advisor --cov-report=term-missing
