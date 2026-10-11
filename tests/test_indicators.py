@@ -2,6 +2,7 @@
 
 import numpy as np
 import pandas as pd
+import pytest
 
 
 from robo_advisor.features.indicators import calculate_macd, calculate_rsi
@@ -86,6 +87,7 @@ def test_macd_is_normalized_by_price_by_default():
     )
 
 
+@pytest.mark.leakage
 def test_rsi_does_not_reference_future_values():
     """미래 가격을 바꿔도 과거 RSI가 변하지 않아야 한다."""
     close = pd.Series(np.linspace(100.0, 130.0, 80))
@@ -104,6 +106,7 @@ def test_rsi_does_not_reference_future_values():
     )
 
 
+@pytest.mark.leakage
 def test_macd_does_not_reference_future_values():
     """미래 가격을 바꿔도 과거 MACD와 Signal은 변하지 않아야 한다."""
     close = pd.Series(np.linspace(100.0, 150.0, 80))

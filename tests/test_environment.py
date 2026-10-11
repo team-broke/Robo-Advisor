@@ -150,6 +150,7 @@ def tag(available_at, score=0.8, asset="A"):
     )
 
 
+@pytest.mark.leakage
 def test_risk_availability_latest_ties_and_missing_slots():
     index = frames()[0].index
     tags = [tag(index[0]), tag(index[2], 0.2), tag(index[2], 0.6), tag(index[5], 1)]
@@ -161,6 +162,7 @@ def test_risk_availability_latest_ties_and_missing_slots():
     np.testing.assert_allclose(env.step([0, 0, 0])[0][-2:], [0.3, 0])
 
 
+@pytest.mark.leakage
 def test_published_tag_is_hidden_until_available():
     index = frames()[0].index
     delayed = tag(index[2]).model_copy(update={"published_at": index[0].to_pydatetime()})
@@ -169,6 +171,7 @@ def test_published_tag_is_hidden_until_available():
     assert env.step([0, 0, 0])[0][-2] == pytest.approx(0.4)
 
 
+@pytest.mark.leakage
 def test_future_changes_do_not_change_observation_or_current_transition():
     original = frames()
     changed = tuple(frame.copy() for frame in original)
@@ -262,6 +265,7 @@ def test_invalid_data(case):
         PortfolioEnv(returns, rsi, macd, lookback=2, n_assets=2)
 
 
+@pytest.mark.leakage
 def test_indicator_warmup_is_not_backfilled():
     returns, rsi, macd = frames()
     rsi.iloc[0] = np.nan

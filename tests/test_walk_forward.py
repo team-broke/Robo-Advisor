@@ -7,6 +7,7 @@ import pytest
 from robo_advisor.backtest.walk_forward import walk_forward_split
 
 
+@pytest.mark.leakage
 def test_reference_calendar_and_warmup():
     dates = pd.date_range("2020-01-01", "2025-12-31", freq="D")
     windows = walk_forward_split(dates, start_date="2020-01-01", warmup_periods=20)
@@ -22,6 +23,7 @@ def test_reference_calendar_and_warmup():
     assert not np.intersect1d(windows[0].test, windows[1].test).size
 
 
+@pytest.mark.leakage
 def test_future_dates_do_not_change_existing_windows():
     dates = pd.date_range("2020-01-01", "2026-12-31")
     shorter = walk_forward_split(dates[dates < "2026"], start_date="2020-01-01")
