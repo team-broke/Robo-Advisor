@@ -1,6 +1,6 @@
 ﻿# 요구사항 추적표
 
-> 기준 브랜치/커밋: `develop` / `804e575` (2026-10-08 확인)
+> 기준 브랜치/커밋: `develop` / `8b53436` (2026-10-12 확인)
 
 상태 범례: ✅ 완료 · 🚧 진행 중 · ⏳ 후행 작업 대기 · ❌ 미구현
 
@@ -14,6 +14,22 @@
 - 🚧 진행 중: 열린 PR에는 구현이 있으나 `develop`에는 아직 없다.
 - ⏳ 후행 작업 대기: 일부 기반은 완료됐지만 명시된 후행 Issue의 구현·실험·산출물이 필요하다.
 - ❌ 미구현: `develop`과 확인된 열린 PR에 구현 또는 필수 산출물이 없다.
+
+## 현재까지 구현된 주요 기능
+
+- 공통 도메인 스키마 / RiskTag 계약
+- RSI / MACD
+- 원천 데이터 검증
+- 학습 구간 전용 정규화
+- Gymnasium 포트폴리오 환경
+- 거래비용 / 리밸런싱 회계
+- 보상함수 3종
+- MDD Safe-Guard
+- Walk-Forward 분할
+- 성과지표 12종
+- Rolling Markowitz / 실패 대체 정책
+- 시장 국면 라벨러
+- 누수 검증 CI
 
 ## 2. 기능 요구사항 추적
 
@@ -31,16 +47,16 @@
 
 | ID | 요구사항 | 관련 Issue | 상태 |
 |---|---|---|---|
-| FR-01 | 자산·벤치마크·환율 데이터 수집과 원천 데이터 검증 | #9 · #10 · #11 | ❌ 미구현 |
+| FR-01 | 자산·벤치마크·환율 데이터 수집과 원천 데이터 검증 | #9 · #10 · #11 | ⏳ 후행 작업 대기 |
 | FR-02 | 누수 방지 전처리, RSI·MACD, 학습 구간 정규화와 입력 계보 | #12 · #13 · #14 · #15 · #16 | 🚧 진행 중 |
 | FR-03 | Gymnasium 관측·행동 공간, 거래비용·리밸런싱 회계, MDD Safe-Guard | #17 · #18 · #19 · #20 | ✅ 완료 |
 | FR-04 | PPO 학습과 보상함수 3종·lambda 실험, 학습곡선 | #19 · #21 · #22 · #23 | ⏳ 후행 작업 대기 |
 | FR-05 | Walk-Forward 완전 재학습 백테스트와 12개 성과지표·비교 결과 | #24 · #25 · #26 · #27 | ⏳ 후행 작업 대기 |
-| FR-06 | 롤링 Markowitz, 실패 대체 정책과 MVO 백테스트 | #28 · #29 · #30 | 🚧 진행 중 |
+| FR-06 | 롤링 Markowitz, 실패 대체 정책과 MVO 백테스트 | #28 · #29 · #30 | ⏳ 후행 작업 대기 |
 | FR-07 | DART·뉴스 수집, 정제·시점 검증과 ChromaDB 색인 | #31 · #32 · #33 | ❌ 미구현 |
 | FR-08 | LangGraph Agentic RAG, self-correction, reasoning trace와 리스크 태그의 RL 연계 | #34 · #35 · #36 · #37 · #38 | ⏳ 후행 작업 대기 |
 | FR-09 | PPO 정책의 SHAP 설명과 Summary·Force Plot | #39 · #40 · #41 | ❌ 미구현 |
-| FR-10 | 시장 국면별 ANOVA 3종, 가정 진단과 Tukey HSD | #42 · #43 · #44 · #45 | 🚧 진행 중 |
+| FR-10 | 시장 국면별 ANOVA 3종, 가정 진단과 Tukey HSD | #42 · #43 · #44 · #45 | ⏳ 후행 작업 대기 |
 | FR-11 | FastAPI 5개 엔드포인트, 사전 로드·캐시·오류 추적 | #46 · #47 · #48 · #49 | ❌ 미구현 |
 | FR-12 | HTTP 전용 Streamlit 대시보드와 Docker 배포 | #50 · #51 · #52 · #53 · #54 · #55 | ❌ 미구현 |
 
@@ -48,15 +64,15 @@
 
 #### FR-01. 자산·벤치마크·환율 데이터 수집과 원천 데이터 검증
 
-상태: ❌ 미구현
+상태: ⏳ 후행 작업 대기
 
 관련 Issue: #9 · #10 · #11
 
-구현: 미구현
+구현: 원천 데이터 검증은 [`validation.py`](../src/robo_advisor/data/validation.py)에 존재한다. 데이터 수집(#9)과 스냅샷(#11)은 미구현이다.
 
-테스트/검증: 미구현
+테스트/검증: [`test_data_validation.py`](../tests/test_data_validation.py)
 
-증빙 산출물: 데이터 스냅샷 예정(#11)
+증빙 산출물: 원천 데이터 검증 병합 PR #79. 데이터 스냅샷은 예정(#11)
 
 #### FR-02. 누수 방지 전처리, RSI·MACD, 학습 구간 정규화와 입력 계보
 
@@ -64,11 +80,11 @@
 
 관련 Issue: #12 · #13 · #14 · #15 · #16
 
-구현: RSI·MACD만 [`indicators.py`](../src/robo_advisor/features/indicators.py)에 존재한다. #14는 열린 PR #77에만 존재한다.
+구현: RSI·MACD는 [`indicators.py`](../src/robo_advisor/features/indicators.py), 학습 구간 전용 정규화기는 [`scaling.py`](../src/robo_advisor/features/scaling.py)에 존재한다. 로그수익률·거래일 정합 파이프라인(#12)은 열린 PR #81에서 진행 중이며 `develop`에는 아직 반영되지 않았다. 입력 계보(#15)는 미구현이다.
 
-테스트/검증: [`test_indicators.py`](../tests/test_indicators.py). #14 검증은 `develop`에 없다.
+테스트/검증: [`test_indicators.py`](../tests/test_indicators.py), [`test_scaling.py`](../tests/test_scaling.py). [CI 워크플로](../.github/workflows/ci.yml)가 [`test_indicators.py`](../tests/test_indicators.py), [`test_environment.py`](../tests/test_environment.py), [`test_walk_forward.py`](../tests/test_walk_forward.py)의 leakage 마커 테스트를 별도 실행한다.
 
-증빙 산출물: RSI·MACD 병합 PR #68. 정규화·입력 데이터셋 산출물은 예정이다.
+증빙 산출물: RSI·MACD 병합 PR #68, 정규화 병합 PR #77, 누수 검증 CI 병합 PR #80. 전처리 데이터·입력 계보 산출물은 예정이다.
 
 #### FR-03. Gymnasium 관측·행동 공간, 거래비용·리밸런싱 회계, MDD Safe-Guard
 
@@ -108,15 +124,15 @@
 
 #### FR-06. 롤링 Markowitz, 실패 대체 정책과 MVO 백테스트
 
-상태: 🚧 진행 중
+상태: ⏳ 후행 작업 대기
 
 관련 Issue: #28 · #29 · #30
 
-구현: `develop`에는 없다. #28·#29는 열린 PR #75에만 존재한다.
+구현: Rolling Markowitz와 실패 대체 정책은 [`mvo.py`](../src/robo_advisor/baselines/mvo.py)에 존재한다. MVO 백테스트(#30)는 미구현이다.
 
-테스트/검증: `develop`에는 없음
+테스트/검증: [`test_mvo.py`](../tests/test_mvo.py)
 
-증빙 산출물: MVO 백테스트 산출물 예정(#30)
+증빙 산출물: Rolling Markowitz·실패 대체 정책 병합 PR #75. MVO 백테스트 산출물 예정(#30)
 
 #### FR-07. DART·뉴스 수집, 정제·시점 검증과 ChromaDB 색인
 
@@ -156,15 +172,15 @@
 
 #### FR-10. 시장 국면별 ANOVA 3종, 가정 진단과 Tukey HSD
 
-상태: 🚧 진행 중
+상태: ⏳ 후행 작업 대기
 
 관련 Issue: #42 · #43 · #44 · #45
 
-구현: `develop`에는 없다. #43은 열린 PR #76에만 존재한다.
+구현: 시장 국면 라벨러는 [`regimes.py`](../src/robo_advisor/experiments/regimes.py)에 존재한다. ANOVA 표본 구성(#42), 검정·가정 진단(#44), Tukey HSD·시각화(#45)는 미구현이다.
 
-테스트/검증: `develop`에는 없음
+테스트/검증: [`test_regimes.py`](../tests/test_regimes.py)
 
-증빙 산출물: ANOVA 표·진단·사후검정 시각화 예정
+증빙 산출물: 시장 국면 라벨러 병합 PR #76. ANOVA 표·진단·사후검정 시각화 예정
 
 #### FR-11. FastAPI 5개 엔드포인트, 사전 로드·캐시·오류 추적
 
@@ -205,7 +221,7 @@
 | RPT-04 | 보상함수 3종 실험 | #22 · #23 · #59 | ⏳ 후행 작업 대기 |
 | RPT-05 | 백테스트 결과 | #25 · #27 · #30 · #59 | ⏳ 후행 작업 대기 |
 | RPT-06 | SHAP 해석 | #39 · #40 · #41 · #59 | ❌ 미구현 |
-| RPT-07 | ANOVA 검증 | #42 · #43 · #44 · #45 · #59 | 🚧 진행 중 |
+| RPT-07 | ANOVA 검증 | #42 · #43 · #44 · #45 · #59 | ⏳ 후행 작업 대기 |
 | RPT-08 | 한계·개선 | #57 · #58 · #59 · #60 · #61 | ❌ 미구현 |
 
 ### 3.2 섹션별 근거
@@ -218,9 +234,9 @@
 
 #### RPT-02. 데이터·전처리
 
-근거 코드/모듈: [`indicators.py`](../src/robo_advisor/features/indicators.py)
+근거 코드/모듈: [`validation.py`](../src/robo_advisor/data/validation.py), [`indicators.py`](../src/robo_advisor/features/indicators.py), [`scaling.py`](../src/robo_advisor/features/scaling.py), [CI 워크플로](../.github/workflows/ci.yml)
 
-데이터·실험 산출물: 원천 스냅샷·전처리 데이터·계보는 미구현
+데이터·실험 산출물: 로그수익률·거래일 정합 파이프라인은 열린 PR #81에서 진행 중이며 `develop`에는 아직 없다. 원천 스냅샷·입력 계보는 미구현
 
 #### RPT-03. RL 환경 설계
 
@@ -236,9 +252,9 @@
 
 #### RPT-05. 백테스트 결과
 
-근거 코드/모듈: [`walk_forward.py`](../src/robo_advisor/backtest/walk_forward.py), [`metrics.py`](../src/robo_advisor/backtest/metrics.py)
+근거 코드/모듈: [`walk_forward.py`](../src/robo_advisor/backtest/walk_forward.py), [`metrics.py`](../src/robo_advisor/backtest/metrics.py), [`mvo.py`](../src/robo_advisor/baselines/mvo.py)
 
-데이터·실험 산출물: PPO·벤치마크·동일가중·MVO 비교 결과는 미구현
+데이터·실험 산출물: 분할기·성과지표·Rolling Markowitz와 실패 대체 정책은 구현됐지만 PPO·벤치마크·동일가중·MVO 비교 결과는 미구현
 
 #### RPT-06. SHAP 해석
 
@@ -248,7 +264,7 @@
 
 #### RPT-07. ANOVA 검증
 
-근거 코드/모듈: `develop`에는 없다. 시장 국면 라벨러는 열린 PR #76에만 존재한다.
+근거 코드/모듈: 시장 국면 라벨러 [`regimes.py`](../src/robo_advisor/experiments/regimes.py)
 
 데이터·실험 산출물: ANOVA 표·가정 진단·Tukey HSD 시각화 미구현
 
@@ -264,15 +280,15 @@
 
 | 영역 | 남은 작업 | 관련 Issue |
 |---|---|---|
-| 데이터 | 데이터 수집·검증·스냅샷 | #9 · #10 · #11 |
-| 전처리 | 거래일 정합 전처리·정규화·입력 계보·누수 CI. #14는 PR #77에서 진행 중 | #12 · #14 · #15 · #16 |
+| 데이터 | 데이터 수집·스냅샷 | #9 · #11 |
+| 전처리 | 로그수익률·거래일 정합 파이프라인은 열린 PR #81에서 진행 중. 입력 계보는 미구현 | #12 · #15 |
 | PPO | PPO 학습·보상/lambda 실험·학습곡선 | #21 · #22 · #23 |
 | 백테스트 | 윈도우별 완전 재학습과 PPO·벤치마크·동일가중 결과 | #25 · #27 |
-| MVO | MVO 구현·대체 정책·백테스트. #28·#29는 PR #75에서 진행 중 | #28 · #29 · #30 |
+| MVO | MVO 백테스트 | #30 |
 | 리서치 데이터 | DART·뉴스 수집부터 ChromaDB 색인 | #31 · #32 · #33 |
 | Agentic RAG | LangGraph, self-correction, reasoning trace, RiskTag 생성·RL 연계 데이터셋 | #34 · #35 · #36 · #37 · #38 |
 | SHAP | SHAP 설명·계산·시각화 | #39 · #40 · #41 |
-| ANOVA | ANOVA 표본·국면·검정·사후 분석. #43은 PR #76에서 진행 중 | #42 · #43 · #44 · #45 |
+| ANOVA | ANOVA 표본 구성·검정·가정 진단·사후 분석 | #42 · #44 · #45 |
 | API | FastAPI·캐시·지연 테스트·로깅 | #46 · #47 · #48 · #49 |
 | 대시보드·배포 | Streamlit 화면과 Docker 배포 | #50 · #51 · #52 · #53 · #54 · #55 |
 | 최종화 | 전체 검증, 코드 리뷰, README, 리포트·PDF, 재현성 검증 | #56 · #57 · #58 · #59 · #60 · #61 |
