@@ -102,6 +102,7 @@ class PortfolioEnv(gym.Env):
         self._tags = tuple(risk_tags)
         if any(not isinstance(tag, RiskTag) or tag.asset not in self._assets for tag in self._tags):
             raise ValueError("risk_tags must contain RiskTag objects for known assets")
+        self._scores = self._risk_scores()
         self.lookback = lookback
         self.n_assets = n_assets
         self._initial_nav = float(initial_nav)
@@ -134,24 +135,31 @@ class PortfolioEnv(gym.Env):
         self.observation_space = spaces.Box(low, high, dtype=np.float64)
         self._done = True
 
-    def _observation(self):
-        scores = np.zeros(self.n_assets)
+    def _risk_scores(self):
+        """Precompute each timestamp's latest available score so steps do not scan tags."""
+        scores = np.zeros((len(self._index), len(self._assets)))
+        times = self._index.as_unit("ns").asi8
         for i, asset in enumerate(self._assets):
-            available = [
-                tag
-                for tag in self._tags
-                if tag.asset == asset and tag.available_at <= self._index[self._cursor]
-            ]
-            if available:
-                latest = max(tag.available_at for tag in available)
-                scores[i] = max(tag.risk_score for tag in available if tag.available_at == latest)
+            latest = {}
+            for tag in self._tags:
+                if tag.asset == asset:
+                    at = pd.Timestamp(tag.available_at).value
+                    latest[at] = max(latest.get(at, 0.0), tag.risk_score)
+            if latest:
+                available = np.array(sorted(latest))
+                positions = np.searchsorted(available, times, side="right") - 1
+                visible = positions >= 0
+                scores[visible, i] = [latest[at] for at in available[positions[visible]]]
+        return scores
+
+    def _observation(self):
         return np.concatenate(
             (
                 self._returns[self._cursor - self.lookback + 1 : self._cursor + 1].ravel(),
                 self._weights,
                 self._rsi[self._cursor] / 100,
                 self._macd[self._cursor],
-                scores,
+                self._scores[self._cursor],
             )
         )
 
