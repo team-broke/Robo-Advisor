@@ -294,3 +294,36 @@ def test_extreme_logits_and_custom_initial_weights():
     info = env.step([20, -20, -20])[4]
     assert info["target_weights"].sum() == pytest.approx(1)
     assert np.all(info["target_weights"] >= 0)
+
+
+def naive_scores(tags, assets, at):
+    scores = np.zeros(len(assets))
+    for i, asset in enumerate(assets):
+        available = [t for t in tags if t.asset == asset and t.available_at <= at]
+        if available:
+            latest = max(t.available_at for t in available)
+            scores[i] = max(t.risk_score for t in available if t.available_at == latest)
+    return scores
+
+
+@pytest.mark.leakage
+def test_precomputed_risk_scores_match_scanning_every_tag():
+    rng = np.random.default_rng(7)
+    index = frames()[0].index
+    offsets = pd.to_timedelta(rng.integers(-36, 7 * 24, size=40), unit="h")
+    tags = [
+        tag((index[0] + offset).to_pydatetime(), score=round(float(score), 1), asset=asset)
+        for offset, score, asset in zip(
+            offsets, rng.uniform(0, 1, size=40), rng.choice(["A", "B"], size=40)
+        )
+    ]
+    tags += [tag(index[2], 0.1), tag(index[2], 0.9)]
+    env = make_env(risk_tags=tags)
+    obs, info = env.reset()
+    observed = [(obs, info["timestamp"])]
+    truncated = False
+    while not truncated:
+        obs, _, _, truncated, info = env.step([0, 0, 0])
+        observed.append((obs, info["timestamp"]))
+    for obs, at in observed:
+        np.testing.assert_allclose(obs[-2:], naive_scores(tags, ["A", "B"], at))
