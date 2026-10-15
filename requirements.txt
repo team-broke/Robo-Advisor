@@ -458,7 +458,7 @@ sqlalchemy==2.0.54
     # via
     #   langchain
     #   langchain-community
-stable-baselines3==2.3.0
+stable-baselines3==2.3.2
     # via -r requirements.in
 starlette==1.7.0
     # via
