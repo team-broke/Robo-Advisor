@@ -1,6 +1,6 @@
 # 직접 의존성만 기술한다. 전체 해석 결과는 requirements.lock 에 있다.
 # 호환성 이슈가 잦은 세 패키지는 명세에 따라 버전을 고정한다.
-stable-baselines3==2.3.0
+stable-baselines3==2.3.2
 shap==0.45.0
 langchain>=0.2.0,<0.3.0
 

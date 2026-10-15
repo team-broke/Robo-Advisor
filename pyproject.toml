@@ -8,7 +8,7 @@ requires-python = ">=3.10"
 # 전이 의존성까지 포함한 전체 고정 버전은 requirements.txt 에 있다.
 # stable-baselines3 / shap / langchain 은 호환성 이슈가 잦아 명세에 따라 범위를 고정한다.
 dependencies = [
-    "stable-baselines3==2.3.0",
+    "stable-baselines3==2.3.2",
     "shap==0.45.0",
     "langchain>=0.2.0,<0.3.0",
     "gymnasium",
