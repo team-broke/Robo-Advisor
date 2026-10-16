@@ -1,0 +1,250 @@
+# 사용자가 확정한 팀용 12자산. 기존 후보·15자산 실험 설정은 별도 보존한다.
+# 자산 선정 확정은 원천 검증 통과 또는 학습 승인을 의미하지 않는다.
+schema_version: 1
+collection:
+  start_date: '2019-09-01'
+  end_exclusive: true
+universe:
+  target_etf_count: 12
+  status: confirmed
+  selected_etfs:
+  - SPY
+  - IWM
+  - EFA
+  - EEM
+  - IEF
+  - TIP
+  - LQD
+  - GLD
+  - DBC
+  - VNQ
+  - KODEX_200TR
+  - KTB10Y
+risk_free_policy:
+  status: unconfirmed
+  selected_dataset: null
+  currency: null
+  daily_conversion: null
+  day_count: null
+datasets:
+- dataset_id: SPY
+  symbol: SPY
+  source: yahoo
+  role: etf
+  market: US
+  currency: USD
+  timezone: America/New_York
+  asset_class: us_large_cap_equity
+  rationale: 사용자가 확정한 팀용 12개 투자자산; 자산 선정 확정은 원천 데이터 검증 또는 학습 승인이 아님
+  selection_status: confirmed
+  unit: USD
+- dataset_id: IWM
+  symbol: IWM
+  source: yahoo
+  role: etf
+  market: US
+  currency: USD
+  timezone: America/New_York
+  asset_class: us_small_cap_equity
+  rationale: 사용자가 확정한 팀용 12개 투자자산; 자산 선정 확정은 원천 데이터 검증 또는 학습 승인이 아님
+  selection_status: confirmed
+  unit: USD
+- dataset_id: EFA
+  symbol: EFA
+  source: yahoo
+  role: etf
+  market: US
+  currency: USD
+  timezone: America/New_York
+  asset_class: developed_market_equity
+  rationale: 사용자가 확정한 팀용 12개 투자자산; 자산 선정 확정은 원천 데이터 검증 또는 학습 승인이 아님
+  selection_status: confirmed
+  unit: USD
+- dataset_id: EEM
+  symbol: EEM
+  source: yahoo
+  role: etf
+  market: US
+  currency: USD
+  timezone: America/New_York
+  asset_class: emerging_market_equity
+  rationale: 사용자가 확정한 팀용 12개 투자자산; 자산 선정 확정은 원천 데이터 검증 또는 학습 승인이 아님
+  selection_status: confirmed
+  unit: USD
+- dataset_id: IEF
+  symbol: IEF
+  source: yahoo
+  role: etf
+  market: US
+  currency: USD
+  timezone: America/New_York
+  asset_class: us_intermediate_treasury
+  rationale: 사용자가 확정한 팀용 12개 투자자산; 자산 선정 확정은 원천 데이터 검증 또는 학습 승인이 아님
+  selection_status: confirmed
+  unit: USD
+- dataset_id: TIP
+  symbol: TIP
+  source: yahoo
+  role: etf
+  market: US
+  currency: USD
+  timezone: America/New_York
+  asset_class: us_inflation_linked_bond
+  rationale: 사용자가 확정한 팀용 12개 투자자산; 자산 선정 확정은 원천 데이터 검증 또는 학습 승인이 아님
+  selection_status: confirmed
+  unit: USD
+- dataset_id: LQD
+  symbol: LQD
+  source: yahoo
+  role: etf
+  market: US
+  currency: USD
+  timezone: America/New_York
+  asset_class: us_investment_grade_corporate_bond
+  rationale: 사용자가 확정한 팀용 12개 투자자산; 자산 선정 확정은 원천 데이터 검증 또는 학습 승인이 아님
+  selection_status: confirmed
+  unit: USD
+- dataset_id: GLD
+  symbol: GLD
+  source: yahoo
+  role: etf
+  market: US
+  currency: USD
+  timezone: America/New_York
+  asset_class: gold
+  rationale: 사용자가 확정한 팀용 12개 투자자산; 자산 선정 확정은 원천 데이터 검증 또는 학습 승인이 아님
+  selection_status: confirmed
+  unit: USD
+- dataset_id: DBC
+  symbol: DBC
+  source: yahoo
+  role: etf
+  market: US
+  currency: USD
+  timezone: America/New_York
+  asset_class: diversified_commodity
+  rationale: 사용자가 확정한 팀용 12개 투자자산; 자산 선정 확정은 원천 데이터 검증 또는 학습 승인이 아님
+  selection_status: confirmed
+  unit: USD
+- dataset_id: VNQ
+  symbol: VNQ
+  source: yahoo
+  role: etf
+  market: US
+  currency: USD
+  timezone: America/New_York
+  asset_class: us_real_estate
+  rationale: 사용자가 확정한 팀용 12개 투자자산; 자산 선정 확정은 원천 데이터 검증 또는 학습 승인이 아님
+  selection_status: confirmed
+  unit: USD
+- dataset_id: KODEX_200TR
+  symbol: 278530.KS
+  source: yahoo
+  role: etf
+  market: KRX
+  currency: KRW
+  timezone: Asia/Seoul
+  asset_class: korea_large_cap_equity_total_return_index
+  rationale: 사용자가 확정한 팀용 12개 투자자산; 자산 선정 확정은 원천 데이터 검증 또는 학습 승인이 아님
+  selection_status: confirmed
+  unit: KRW
+- dataset_id: KTB10Y
+  symbol: 148070.KS
+  source: yahoo
+  role: etf
+  market: KRX
+  currency: KRW
+  timezone: Asia/Seoul
+  asset_class: korea_10_year_treasury
+  rationale: 사용자가 확정한 팀용 12개 투자자산; 자산 선정 확정은 원천 데이터 검증 또는 학습 승인이 아님
+  selection_status: confirmed
+  unit: KRW
+- dataset_id: KOSPI
+  symbol: ^KS11
+  source: yahoo
+  role: benchmark
+  market: KRX
+  currency: KRW
+  timezone: Asia/Seoul
+  asset_class: korea_equity_price_index
+  rationale: 'Issue #9가 명시한 KOSPI 벤치마크 수집 대상; ETF 유니버스에 포함하지 않음'
+  selection_status: confirmed
+  unit: index_points
+- dataset_id: SP500
+  symbol: ^GSPC
+  source: yahoo
+  role: benchmark
+  market: US
+  currency: USD
+  timezone: America/New_York
+  asset_class: us_equity_price_index
+  rationale: 'Issue #9가 명시한 S&P500 벤치마크 수집 대상; 가격지수이며 ETF 유니버스에 포함하지 않음'
+  selection_status: confirmed
+  unit: index_points
+- dataset_id: USD_KRW
+  symbol: KRW=X
+  source: yahoo
+  role: fx
+  market: FX
+  currency: KRW
+  timezone: Asia/Seoul
+  asset_class: currency_exchange_rate
+  rationale: 'Issue #9가 명시한 Yahoo 환율 수집 대상; 단위는 1 USD당 KRW이며 원천 방향 검증은 별도 필요'
+  selection_status: confirmed
+  unit: KRW_per_USD
+- dataset_id: DGS3MO
+  symbol: DGS3MO
+  source: fred
+  role: risk_free
+  market: US_RATE
+  currency: USD
+  timezone: America/New_York
+  asset_class: us_3_month_treasury_yield
+  rationale: 개인 원천 Excel에서 확인된 FRED 3개월 국채 연율 수익률 후보; 최종 Rf 소스·통화·환산 정책 미확정
+  selection_status: candidate
+  unit: percent_per_annum
+legacy_import:
+  schema_version: 1
+  sources:
+    SPY:
+      kind: workbook
+      sha256: cbcc4548993eda14acd3a10b5c35ea73acaf6cb3f712d7a9713c9bec83578551
+    IWM:
+      kind: workbook
+      sha256: cbcc4548993eda14acd3a10b5c35ea73acaf6cb3f712d7a9713c9bec83578551
+    EFA:
+      kind: workbook
+      sha256: cbcc4548993eda14acd3a10b5c35ea73acaf6cb3f712d7a9713c9bec83578551
+    EEM:
+      kind: workbook
+      sha256: cbcc4548993eda14acd3a10b5c35ea73acaf6cb3f712d7a9713c9bec83578551
+    IEF:
+      kind: workbook
+      sha256: cbcc4548993eda14acd3a10b5c35ea73acaf6cb3f712d7a9713c9bec83578551
+    TIP:
+      kind: workbook
+      sha256: cbcc4548993eda14acd3a10b5c35ea73acaf6cb3f712d7a9713c9bec83578551
+    LQD:
+      kind: workbook
+      sha256: cbcc4548993eda14acd3a10b5c35ea73acaf6cb3f712d7a9713c9bec83578551
+    GLD:
+      kind: workbook
+      sha256: cbcc4548993eda14acd3a10b5c35ea73acaf6cb3f712d7a9713c9bec83578551
+    DBC:
+      kind: csv
+      sha256: 6e3a452439f60cbf49c820ae18095f6bda1bb3f1b431f8239f769b7bb98e4c75
+      filename: DBC_2019_2025.csv
+    VNQ:
+      kind: workbook
+      sha256: cbcc4548993eda14acd3a10b5c35ea73acaf6cb3f712d7a9713c9bec83578551
+    KODEX_200TR:
+      kind: csv
+      sha256: 087eb6ca2abe27b87cb333befa0a478a402bd1c961f5f745ef5cdcfd1a44c9de
+      filename: KODEX_200TR_2019_2025.csv
+    KTB10Y:
+      kind: csv
+      sha256: 79e5bdc53e1d4f3d3b90aa6f8ddaac6e405f1b6d2c5942d9b01b137a612351dd
+      filename: KTB10Y_2019_2025.csv
+  reference_kospi:
+    filename: KOSPI_2019_2025.csv
+    sha256: 7046e78e3cb3ec308e7790f7a7d9d801a5e41dc25e8be8fb122680d2d6d73d1e
