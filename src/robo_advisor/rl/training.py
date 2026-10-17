@@ -38,6 +38,7 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 
 from robo_advisor.config import get_settings
+from robo_advisor.rl.curves import MONITOR_DIR, write_run_curves
 from robo_advisor.rl.environment import PortfolioEnv
 from robo_advisor.rl.rewards import RewardVariant
 from robo_advisor.schemas.risk import RiskTag
@@ -243,7 +244,12 @@ def seed_everything(seed: int, device: str) -> None:
         torch.backends.cudnn.benchmark = False
 
 
-def _make_env(dataset: TrainingDataset, config: EnvironmentConfig, seed: int):
+def _make_env(
+    dataset: TrainingDataset,
+    config: EnvironmentConfig,
+    seed: int,
+    monitor_file: Path | None = None,
+):
     env = PortfolioEnv(
         dataset.returns,
         dataset.rsi,
@@ -253,7 +259,9 @@ def _make_env(dataset: TrainingDataset, config: EnvironmentConfig, seed: int):
         **config.model_dump(),
     )
     env.reset(seed=seed)
-    return Monitor(env)
+    # 종료 사유를 함께 남겨 학습곡선에서 Safe-Guard 빈도를 계산한다.
+    filename = None if monitor_file is None else str(monitor_file)
+    return Monitor(env, filename=filename, info_keywords=("reason",))
 
 
 def _git_commit() -> str | None:
@@ -310,6 +318,8 @@ def run_training(
     probe.close()
     model_dir.mkdir(parents=True, exist_ok=False)
     artifact_dir.mkdir(parents=True, exist_ok=False)
+    monitors = artifact_dir / MONITOR_DIR
+    monitors.mkdir()
     checkpoints = model_dir / "checkpoints"
     checkpoints.mkdir()
     manifest_path = artifact_dir / "manifest.json"
@@ -353,6 +363,7 @@ def run_training(
         "checkpoint_interval_timesteps": save_calls * config.n_envs,
         "checkpoint_paths": [],
         "final_model_path": str(final_path),
+        "learning_curves": None,
     }
 
     def write_manifest():
@@ -366,7 +377,13 @@ def run_training(
     model = None
     try:
         factories = [
-            partial(_make_env, dataset, config.env, config.seed + rank)
+            partial(
+                _make_env,
+                dataset,
+                config.env,
+                config.seed + rank,
+                monitors / f"env-{rank:03d}",
+            )
             for rank in range(config.n_envs)
         ]
         vec = (
@@ -387,7 +404,19 @@ def run_training(
         callback = CheckpointCallback(save_freq=save_calls, save_path=str(checkpoints))
         model.learn(total_timesteps=config.total_timesteps, callback=callback)
         model.save(str(final_path))
+        # Monitor 파일을 닫아 마지막 에피소드까지 기록한 뒤 곡선을 만든다.
+        vec.close()
+        vec = None
         manifest["status"] = "completed"
+        # 곡선 생성 실패가 저장된 모델을 실패 처리하지 않도록 따로 기록한다.
+        # python -m robo_advisor.rl.curves --refresh 로 다시 만들 수 있다.
+        try:
+            curves = write_run_curves(artifact_dir.parent, run_id)
+            manifest["learning_curves"] = {
+                key: curves[key] for key in ("status", "episodes", "curves_csv", "plot")
+            }
+        except Exception as error:
+            manifest["learning_curves"] = {"error": f"{type(error).__name__}: {error}"}
     except BaseException as error:
         manifest["status"] = "failed"
         manifest["error"] = f"{type(error).__name__}: {error}"
