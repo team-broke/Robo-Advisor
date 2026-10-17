@@ -1,0 +1,15 @@
+# 한 학습 구간의 탐색 설정. 윈도우 반복은 호출자가 담당한다.
+base_training_config: ../training.yaml
+sweep_id: reward-sweep
+stage1:
+  variant: mdd_penalty
+  lambdas: [0.5, 1.0, 2.0, 3.0, 5.0]
+  seeds: [42]
+stage2:
+  seeds: [42, 43, 44, 45, 46]
+  n_candidates: 2
+selection:
+  metric: sharpe
+  higher_is_better: true
+  # Alpha/Beta/IR 선별 시 benchmark_path에 단일 열 parquet를 명시한다.
+  # 벤치마크도 같은 학습 구간으로 준비하며 미래 행이 있으면 거부한다.
