@@ -155,7 +155,8 @@ def test_lower_is_better_and_ties_keep_first(dataset, monkeypatch):
     record = json.loads(result.manifest_path.read_text())["validation"]
     assert [item["timesteps"] for item in record["history"]] == [16, 32, 48, 64]
     mdds = [item["score"] for item in record["history"]]
-    assert mdds[1] == pytest.approx(mdds[2]) < mdds[3] < mdds[0]
+    assert mdds[1] == pytest.approx(mdds[2])
+    assert mdds[2] < mdds[3] < mdds[0]
     assert record["best"]["timesteps"] == 32
 
 
