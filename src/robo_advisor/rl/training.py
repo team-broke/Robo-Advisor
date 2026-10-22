@@ -81,6 +81,9 @@ class PPOConfig(StrictConfig):
 
 class EnvironmentConfig(StrictConfig):
     lookback: PositiveInteger = 20
+    random_start: bool = Field(default=False, strict=True)
+    min_episode_steps: PositiveInteger = 1
+    max_episode_steps: PositiveInteger | None = None
     reward_variant: RewardVariant = RewardVariant.RETURN
     penalty_lambda: float = Field(default=1.0, ge=0)
     mdd_limit: float = Field(
@@ -365,9 +368,12 @@ def run_training(
             dataset, config.validation.start, config.env.lookback
         )
     # 환경 입력을 출력 디렉터리 생성과 프로세스 시작 전에 검증한다.
-    for probe_data in (dataset, validation_data):
-        if probe_data is not None:
-            _make_env(probe_data, config.env, config.seed).close()
+    _make_env(dataset, config.env, config.seed).close()
+    if validation_data is not None:
+        from robo_advisor.rl.evaluation import evaluation_env_config
+
+        # 검증은 평가와 같은 설정(처음부터 끝까지)으로 돌므로 같은 설정으로 확인한다.
+        _make_env(validation_data, evaluation_env_config(config.env), config.seed).close()
     model_dir.mkdir(parents=True, exist_ok=False)
     artifact_dir.mkdir(parents=True, exist_ok=False)
     monitors = artifact_dir / MONITOR_DIR

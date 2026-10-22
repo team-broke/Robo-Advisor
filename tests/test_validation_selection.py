@@ -177,3 +177,13 @@ def test_without_validation_manifest_is_unchanged(dataset):
     assert manifest["validation"] is None
     assert manifest["data_cutoff"]["rows"] == PERIODS
     assert datetime.fromisoformat(manifest["finished_at"]) <= datetime.now(timezone.utc)
+
+
+def test_short_validation_works_with_random_start_training(dataset):
+    raw = payload(dataset)
+    raw["env"].update(random_start=True, min_episode_steps=12, max_episode_steps=20)
+    cfg = training.TrainingConfig.model_validate(raw, context={"smoke": True})
+    result = training.run_training(cfg, run_id="random-start", smoke=True)
+    record = json.loads(result.manifest_path.read_text())["validation"]
+    assert record["rows"] < 12
+    assert [item["observation_count"] for item in record["history"]] == [record["rows"] - 1] * 2

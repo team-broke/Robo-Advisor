@@ -20,9 +20,19 @@ class EvaluationResult:
     observation_count: int
 
 
+def evaluation_env_config(config: EnvironmentConfig) -> EnvironmentConfig:
+    """평가용 환경 설정: 무작위 시작과 에피소드 길이 제한을 해제한다."""
+    return config.model_copy(
+        update={"random_start": False, "max_episode_steps": None, "min_episode_steps": 1}
+    )
+
+
 def evaluate_policy(model, dataset: TrainingDataset, config: EnvironmentConfig) -> EvaluationResult:
-    """비용 차감 후 NAV로 단순수익률을 계산하며 조기 종료 뒤는 채우지 않는다."""
-    env = _make_env(dataset, config, seed=0)
+    """항상 첫 시점부터 평가하며 무작위 시작·에피소드 길이 제한은 해제한다.
+
+    비용 차감 후 NAV로 단순수익률을 계산하며 MDD 조기 종료 뒤는 채우지 않는다.
+    """
+    env = _make_env(dataset, evaluation_env_config(config), seed=0)
     dates, returns = [], []
     try:
         observation, info = env.reset(seed=0)
