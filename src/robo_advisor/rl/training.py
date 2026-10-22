@@ -118,6 +118,32 @@ class CheckpointConfig(StrictConfig):
     save_freq: PositiveInteger = 100000
 
 
+class ValidationConfig(StrictConfig):
+    """학습 컷오프 안의 [start, train_end] 구간을 검증용으로 떼어 낸다."""
+
+    start: datetime
+    eval_freq: PositiveInteger = 50000
+    metric: Literal[
+        "cumulative_return",
+        "cagr",
+        "volatility",
+        "var_95",
+        "cvar_95",
+        "mdd",
+        "sharpe",
+        "sortino",
+        "calmar",
+    ] = "sharpe"
+    higher_is_better: bool = Field(default=True, strict=True)
+
+    @field_validator("start")
+    @classmethod
+    def aware_timestamp(cls, value):
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("validation start must include a timezone")
+        return value.astimezone(timezone.utc)
+
+
 class TrainingConfig(StrictConfig):
     seed: int = Field(default=42, ge=0, le=2**32 - 1, strict=True)
     device: Literal["auto", "cpu", "cuda"] = "auto"
@@ -128,6 +154,7 @@ class TrainingConfig(StrictConfig):
     env: EnvironmentConfig = Field(default_factory=EnvironmentConfig)
     data: DataConfig
     checkpoint: CheckpointConfig = Field(default_factory=CheckpointConfig)
+    validation: ValidationConfig | None = None
 
     @model_validator(mode="after")
     def training_contract(self, info: ValidationInfo):
@@ -137,6 +164,12 @@ class TrainingConfig(StrictConfig):
             raise ValueError("batch_size must be <= n_steps * n_envs")
         if self.seed + self.n_envs - 1 > 2**32 - 1:
             raise ValueError("seed + n_envs - 1 exceeds the seed range")
+        if self.validation is not None:
+            start = self.validation.start
+            if start > self.data.train_end or (
+                self.data.train_start is not None and start <= self.data.train_start
+            ):
+                raise ValueError("validation start must fall inside (train_start, train_end]")
         return self
 
 
@@ -313,9 +346,18 @@ def run_training(
     if model_dir.exists() or artifact_dir.exists():
         raise FileExistsError(f"run_id already exists: {run_id}")
     dataset = load_training_dataset(config.data)
+    validation_data = None
+    if config.validation is not None:
+        from robo_advisor.rl.validation import split_validation
+
+        # 검증 구간 행은 학습 환경에 넣지 않는다.
+        dataset, validation_data = split_validation(
+            dataset, config.validation.start, config.env.lookback
+        )
     # 환경 입력을 출력 디렉터리 생성과 프로세스 시작 전에 검증한다.
-    probe = _make_env(dataset, config.env, config.seed)
-    probe.close()
+    for probe_data in (dataset, validation_data):
+        if probe_data is not None:
+            _make_env(probe_data, config.env, config.seed).close()
     model_dir.mkdir(parents=True, exist_ok=False)
     artifact_dir.mkdir(parents=True, exist_ok=False)
     monitors = artifact_dir / MONITOR_DIR
@@ -364,7 +406,35 @@ def run_training(
         "checkpoint_paths": [],
         "final_model_path": str(final_path),
         "learning_curves": None,
+        "validation": None,
     }
+    validator = None
+    if validation_data is not None:
+        from robo_advisor.rl.validation import ValidationCallback
+
+        validator = ValidationCallback(
+            validation_data,
+            config.env,
+            eval_freq=config.validation.eval_freq,
+            n_envs=config.n_envs,
+            metric=config.validation.metric,
+            higher_is_better=config.validation.higher_is_better,
+            best_path=model_dir / "best_model.zip",
+        )
+        manifest["validation"] = {
+            "start": resolved["validation"]["start"],
+            "end": resolved["data"]["train_end"],
+            "metric": config.validation.metric,
+            "higher_is_better": config.validation.higher_is_better,
+            "eval_interval_timesteps": validator.eval_calls * config.n_envs,
+            "first_index": validation_data.returns.index[config.env.lookback - 1].isoformat(),
+            "last_index": validation_data.returns.index[-1].isoformat(),
+            "rows": len(validation_data.returns) - (config.env.lookback - 1),
+            "train_last_index": dataset.returns.index[-1].isoformat(),
+            "train_rows": len(dataset.returns),
+            "history": [],
+            "best": None,
+        }
 
     def write_manifest():
         temporary = manifest_path.with_suffix(".tmp")
@@ -401,9 +471,14 @@ def run_training(
             policy_kwargs={"net_arch": config.ppo.net_arch.model_dump()},
             **ppo_options,
         )
-        callback = CheckpointCallback(save_freq=save_calls, save_path=str(checkpoints))
-        model.learn(total_timesteps=config.total_timesteps, callback=callback)
+        callbacks = [CheckpointCallback(save_freq=save_calls, save_path=str(checkpoints))]
+        if validator is not None:
+            callbacks.append(validator)
+        model.learn(total_timesteps=config.total_timesteps, callback=callbacks)
         model.save(str(final_path))
+        if validator is not None:
+            # 마지막 모델도 같은 기준으로 평가해 최적 모델 후보에 넣는다.
+            validator.evaluate()
         # Monitor 파일을 닫아 마지막 에피소드까지 기록한 뒤 곡선을 만든다.
         vec.close()
         vec = None
@@ -425,6 +500,9 @@ def run_training(
         manifest["finished_at"] = _utc_now()
         manifest["actual_timesteps"] = int(model.num_timesteps) if model is not None else 0
         manifest["checkpoint_paths"] = [str(path) for path in sorted(checkpoints.glob("*.zip"))]
+        if validator is not None:
+            manifest["validation"]["history"] = validator.history
+            manifest["validation"]["best"] = validator.best
         try:
             write_manifest()
         finally:
