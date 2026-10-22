@@ -1,0 +1,36 @@
+# v5 회귀 비교용 실험 설정. 팀의 정식 12개 유니버스 확정이 아니다.
+schema_version: 1
+universe_id: v5_15
+status: experimental
+asset_config: assets.yaml
+expected_asset_count: 15
+investment_dataset_ids:
+  - SPY
+  - IWM
+  - EFA
+  - EEM
+  - IEF
+  - TLT
+  - TIP
+  - LQD
+  - GLD
+  - VNQ
+  - QQQ
+  - AGG
+  - DBC
+  - KODEX_200TR
+  - KTB10Y
+excluded_dataset_ids:
+  - KODEX_200
+supporting_dataset_ids:
+  benchmarks:
+    - KOSPI
+    - SP500
+  fx: USD_KRW
+  risk_free_candidates:
+    - DGS3MO
+alignment_policy:
+  base_currency: KRW
+  fx_direction: USD/KRW
+  overseas_close_lag_sessions: 1
+  require_available_at: true
