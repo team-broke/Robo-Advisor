@@ -14,12 +14,14 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import logging
 import math
 import os
 import random
 import re
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import partial
@@ -40,6 +42,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from robo_advisor.config import get_settings
 from robo_advisor.rl.curves import MONITOR_DIR, write_run_curves
 from robo_advisor.rl.environment import PortfolioEnv
+from robo_advisor.rl.progress import LOGGER, ProgressCallback, format_duration
 from robo_advisor.rl.rewards import RewardVariant
 from robo_advisor.schemas.risk import RiskTag
 
@@ -320,9 +323,16 @@ class TrainingResult:
 
 
 def run_training(
-    config: TrainingConfig, *, run_id: str | None = None, smoke: bool = False
+    config: TrainingConfig,
+    *,
+    run_id: str | None = None,
+    smoke: bool = False,
+    log_interval: float = 30.0,
 ) -> TrainingResult:
     """학습·체크포인트 저장 후 manifest를 완성하며 기존 실행을 덮어쓰지 않는다.
+
+    진행 상황은 robo_advisor.training 로거로 남기고 실행 디렉터리의 train.log에도 쓴다.
+    log_interval초마다 진행률과 최근 에피소드 요약을 기록한다.
 
     PPO는 rollout 단위로 학습하므로 실제 스텝은 요청값을 초과할 수 있다.
     save_freq는 n_envs로 나눈 값을 올림해 벡터 호출 간격으로 사용한다.
@@ -441,11 +451,46 @@ def run_training(
         temporary.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
         temporary.replace(manifest_path)
 
+    log_file = logging.FileHandler(artifact_dir / "train.log", encoding="utf-8")
+    log_file.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    LOGGER.addHandler(log_file)
+    if LOGGER.level == logging.NOTSET:
+        LOGGER.setLevel(logging.INFO)
+    started = time.monotonic()
+    LOGGER.info(
+        "실행 %s: 장치 %s%s, 병렬 환경 %d개(%s), 목표 %s 스텝, seed %d%s",
+        run_id,
+        device,
+        f" ({manifest['gpu_name']})" if manifest["gpu_name"] else "",
+        config.n_envs,
+        config.vec_env,
+        f"{config.total_timesteps:,}",
+        config.seed,
+        " [smoke]" if smoke else "",
+    )
+    LOGGER.info(
+        "학습 데이터: %d행 %s ~ %s, 자산 %d개, 보상 %s",
+        len(dataset.returns),
+        dataset.returns.index[0].date(),
+        dataset.returns.index[-1].date(),
+        len(dataset.returns.columns),
+        config.env.reward_variant.value,
+    )
+    if validator is not None:
+        LOGGER.info(
+            "검증 구간: %d행 %s ~ %s, %s 스텝마다 %s 평가",
+            manifest["validation"]["rows"],
+            manifest["validation"]["first_index"][:10],
+            manifest["validation"]["last_index"][:10],
+            f"{manifest['validation']['eval_interval_timesteps']:,}",
+            config.validation.metric,
+        )
     seed_everything(config.seed, device)
     write_manifest()
     vec = None
     model = None
     try:
+        LOGGER.info("환경 %d개와 PPO 모델 구성 중", config.n_envs)
         factories = [
             partial(
                 _make_env,
@@ -471,14 +516,33 @@ def run_training(
             policy_kwargs={"net_arch": config.ppo.net_arch.model_dump()},
             **ppo_options,
         )
-        callbacks = [CheckpointCallback(save_freq=save_calls, save_path=str(checkpoints))]
+        callbacks = [
+            CheckpointCallback(save_freq=save_calls, save_path=str(checkpoints)),
+            ProgressCallback(
+                config.total_timesteps,
+                interval_seconds=log_interval,
+                checkpoint_calls=save_calls,
+                checkpoint_dir=checkpoints,
+            ),
+        ]
         if validator is not None:
             callbacks.append(validator)
         model.learn(total_timesteps=config.total_timesteps, callback=callbacks)
         model.save(str(final_path))
+        LOGGER.info("최종 모델 저장: %s", final_path)
         if validator is not None:
             # 마지막 모델도 같은 기준으로 평가해 최적 모델 후보에 넣는다.
             validator.evaluate()
+            if validator.best is None:
+                LOGGER.warning("검증 점수를 계산할 수 없어 최적 모델을 저장하지 않았습니다")
+            else:
+                LOGGER.info(
+                    "검증 최적 모델: %s 스텝, %s=%.4f (%s)",
+                    f"{validator.best['timesteps']:,}",
+                    config.validation.metric,
+                    validator.best["score"],
+                    validator.best["path"],
+                )
         # Monitor 파일을 닫아 마지막 에피소드까지 기록한 뒤 곡선을 만든다.
         vec.close()
         vec = None
@@ -490,11 +554,14 @@ def run_training(
             manifest["learning_curves"] = {
                 key: curves[key] for key in ("status", "episodes", "curves_csv", "plot")
             }
+            LOGGER.info("학습곡선: 수렴 판정 %s, %s", curves["status"], curves["plot"])
         except Exception as error:
             manifest["learning_curves"] = {"error": f"{type(error).__name__}: {error}"}
+            LOGGER.warning("학습곡선 생성 실패: %s", manifest["learning_curves"]["error"])
     except BaseException as error:
         manifest["status"] = "failed"
         manifest["error"] = f"{type(error).__name__}: {error}"
+        LOGGER.error("학습 실패: %s", manifest["error"])
         raise
     finally:
         manifest["finished_at"] = _utc_now()
@@ -505,9 +572,17 @@ def run_training(
             manifest["validation"]["best"] = validator.best
         try:
             write_manifest()
+            LOGGER.info(
+                "종료(%s): 소요 %s, manifest %s",
+                manifest["status"],
+                format_duration(time.monotonic() - started),
+                manifest_path,
+            )
         finally:
             if vec is not None:
                 vec.close()
+            LOGGER.removeHandler(log_file)
+            log_file.close()
     return TrainingResult(
         model, final_path, manifest_path, tuple(Path(path) for path in manifest["checkpoint_paths"])
     )
