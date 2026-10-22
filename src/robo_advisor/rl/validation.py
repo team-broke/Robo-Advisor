@@ -17,6 +17,7 @@ from stable_baselines3.common.callbacks import BaseCallback
 
 from robo_advisor.backtest.metrics import calculate_metrics
 from robo_advisor.rl.evaluation import evaluate_policy
+from robo_advisor.rl.progress import LOGGER
 
 
 def split_validation(dataset, start, lookback: int):
@@ -110,11 +111,22 @@ class ValidationCallback(BaseCallback):
             **score_rollout(self.model, self.dataset, self.env_config, self.metric),
         }
         self.history.append(record)
-        if record["score"] is not None and self._better(record["score"]):
+        improved = record["score"] is not None and self._better(record["score"])
+        if improved:
             self.model.save(str(self.best_path))
             self.best = {
                 "timesteps": timesteps,
                 "score": record["score"],
                 "path": str(self.best_path),
             }
+        score = "계산 불가" if record["score"] is None else f"{record['score']:.4f}"
+        LOGGER.info(
+            "검증 평가 %s 스텝: %s=%s, 관측 %d일, 종료 %s%s",
+            f"{timesteps:,}",
+            self.metric,
+            score,
+            record["observation_count"],
+            record["reason"],
+            " [최적 갱신]" if improved else "",
+        )
         return record

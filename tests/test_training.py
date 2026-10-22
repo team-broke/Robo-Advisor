@@ -307,8 +307,8 @@ def test_cli_overrides_are_validated_and_forwarded(dataset, tmp_path, monkeypatc
     path.write_text(yaml.safe_dump(raw))
     captured = {}
 
-    def capture(cfg, *, run_id, smoke):
-        captured.update(config=cfg, run_id=run_id, smoke=smoke)
+    def capture(cfg, *, run_id, smoke, log_interval):
+        captured.update(config=cfg, run_id=run_id, smoke=smoke, log_interval=log_interval)
         return training.TrainingResult(None, Path("final.zip"), Path("manifest.json"), ())
 
     monkeypatch.setattr(train, "run_training", capture)
@@ -331,6 +331,7 @@ def test_cli_overrides_are_validated_and_forwarded(dataset, tmp_path, monkeypatc
     assert captured["config"].device == "cpu"
     assert captured["config"].total_timesteps == 128
     assert captured["run_id"] == "cli" and captured["smoke"]
+    assert captured["log_interval"] == 30.0
     with pytest.raises(ValidationError):
         training.load_training_config(path, total_timesteps=128)
 
