@@ -33,3 +33,10 @@ data:
   train_end: null  # 필수: 실제 학습 컷오프를 시간대 포함 ISO 시각으로 지정한다.
 checkpoint:
   save_freq: 100000  # 전체 환경의 합산 스텝 기준이며 벡터 호출 단위로 올림한다.
+# 학습 컷오프 안의 마지막 일부를 검증용으로 떼어 최적 모델(best_model.zip)을 고른다.
+# 학습 환경은 start 이전 행만 쓴다. 사용하려면 주석을 풀고 start를 train_end 이전으로 지정한다.
+# validation:
+#   start: 2023-01-01T00:00:00+09:00
+#   eval_freq: 50000  # 전체 환경 합산 스텝 기준
+#   metric: sharpe
+#   higher_is_better: true
