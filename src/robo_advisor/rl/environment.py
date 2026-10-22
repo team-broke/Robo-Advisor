@@ -23,7 +23,7 @@ class PortfolioEnv(gym.Env):
     line from features.indicators, not its signal line. Market-close alignment
     and any overseas lag must be applied upstream before supplying the frames.
 
-    At reset, t = lookback - 1. Observation is flattened oldest-first returns
+    By default reset uses t = lookback - 1. Observation is flattened oldest-first returns
     [t-N+1:t+1], current drift weights (assets then cash), RSI/100, MACD, and
     one risk_score per asset: A*(N+4)+1 float64 values. Missing tags are zero;
     the latest available event persists, with maximum score for timestamp ties.
@@ -35,6 +35,12 @@ class PortfolioEnv(gym.Env):
     at t, deducts costs, applies returns[t+1], and observes at t+1. Reward and
     safeguard use that same net NAV. MDD termination takes precedence over
     exhaustion truncation; either requires reset before another step.
+
+    random_start samples the reset cursor uniformly from the inclusive range
+    [lookback-1, len(index)-1-min_episode_steps] using the seeded Gymnasium RNG.
+    Observations use data through that cursor, never later rows. The minimum
+    reserves available data steps; MDD or max_episode_steps may end an episode
+    earlier. Termination priority is MDD, data exhaustion, then episode limit.
     """
 
     metadata = {"render_modes": []}
@@ -56,6 +62,9 @@ class PortfolioEnv(gym.Env):
         penalty_lambda: float = 1.0,
         mdd_limit: float = 0.15,
         trace_id: str = "portfolio-environment",
+        random_start: bool = False,
+        min_episode_steps: int = 1,
+        max_episode_steps: int | None = None,
     ):
         super().__init__()
         for name, value in (("lookback", lookback), ("n_assets", n_assets)):
@@ -73,6 +82,21 @@ class PortfolioEnv(gym.Env):
             or len(index) <= lookback
         ):
             raise ValueError("index must be ordered, unique, timezone-aware and include a step")
+        if not isinstance(random_start, bool):
+            raise ValueError("random_start must be a bool")
+        for name, value in (
+            ("min_episode_steps", min_episode_steps),
+            ("max_episode_steps", max_episode_steps),
+        ):
+            if name == "max_episode_steps" and value is None:
+                continue
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ValueError(f"{name} must be a positive integer")
+        if min_episode_steps > len(index) - lookback:
+            raise ValueError("min_episode_steps must not exceed len(index) - lookback")
+        self.random_start = random_start
+        self.min_episode_steps = min_episode_steps
+        self.max_episode_steps = max_episode_steps
         if (
             len(returns.columns) != n_assets
             or not returns.columns.is_unique
@@ -164,11 +188,15 @@ class PortfolioEnv(gym.Env):
         )
 
     def reset(self, *, seed=None, options=None):
-        """Reset to the first complete window; seed the Gymnasium RNG."""
+        """Reset at a seeded random cursor or the first complete window."""
         super().reset(seed=seed)
         if options:
             raise ValueError("reset options are not supported")
         self._cursor = self.lookback - 1
+        if self.random_start:
+            max_start = len(self._index) - 1 - self.min_episode_steps
+            self._cursor = int(self.np_random.integers(self._cursor, max_start + 1))
+        self._episode_step = 0
         self._nav = self._initial_nav
         self._weights = self._initial_weights.copy()
         self._history = []
@@ -178,6 +206,7 @@ class PortfolioEnv(gym.Env):
             "nav": self._nav,
             "weights": self._weights.copy(),
             "timestamp": self._index[self._cursor],
+            "start_index": self._cursor,
         }
 
     def step(self, action):
@@ -209,8 +238,21 @@ class PortfolioEnv(gym.Env):
         self._history.append(log_return)
         self._nav, self._weights = result.nav, result.weights
         self._cursor += 1
+        self._episode_step += 1
         terminated = self._guard.termination_result is not None
-        truncated = not terminated and self._cursor == len(self._index) - 1
+        data_exhausted = self._cursor == len(self._index) - 1
+        episode_limit = (
+            self.max_episode_steps is not None and self._episode_step >= self.max_episode_steps
+        )
+        truncated = not terminated and (data_exhausted or episode_limit)
+        if terminated:
+            reason = "mdd_limit_exceeded"
+        elif data_exhausted:
+            reason = "data_exhausted"
+        elif episode_limit:
+            reason = "episode_limit"
+        else:
+            reason = None
         self._done = terminated or truncated
         return (
             self._observation(),
@@ -225,12 +267,11 @@ class PortfolioEnv(gym.Env):
                 "cost": result.cost,
                 "portfolio_log_return": log_return,
                 "timestamp": self._index[self._cursor],
+                "episode_step": self._episode_step,
                 "safeguard": safeguard.model_dump(),
                 "termination_result": (
                     self._guard.termination_result.model_dump() if terminated else None
                 ),
-                "reason": (
-                    "mdd_limit_exceeded" if terminated else "data_exhausted" if truncated else None
-                ),
+                "reason": reason,
             },
         )

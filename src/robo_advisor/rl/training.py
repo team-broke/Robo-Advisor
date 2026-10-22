@@ -78,6 +78,9 @@ class PPOConfig(StrictConfig):
 
 class EnvironmentConfig(StrictConfig):
     lookback: PositiveInteger = 20
+    random_start: bool = Field(default=False, strict=True)
+    min_episode_steps: PositiveInteger = 1
+    max_episode_steps: PositiveInteger | None = None
     reward_variant: RewardVariant = RewardVariant.RETURN
     penalty_lambda: float = Field(default=1.0, ge=0)
     mdd_limit: float = Field(
