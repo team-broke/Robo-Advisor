@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "snapshots": {
+    "parent": {
+      "path": "inputs/parent-snapshot/20261016T121929355317Z_cec9d76f691f41f9b8bda1772a056091",
+      "sha256": "4b0de83602496a6cc976c6b9d057b4dd6823ffd76fb6c71b5f1c733e4bb793f0"
+    },
+    "selected": {
+      "path": "results/actual-research/source-snapshots/20261017T032943682306Z_b55bdb6e38c24f3cbfa638f702cc08b0",
+      "sha256": "52c79c8acf010df607c824bede4448436bcafdb46066aecbcb7777aef087382e"
+    }
+  },
+  "calendars": {
+    "KRX": {
+      "path": "inputs/calendars/krx-reference-sessions-20190901-20251231.csv",
+      "sha256": "a39cd8fb075a73db300dd0b25c247c9be2fb6c8f333ada66450b296560bf673a"
+    },
+    "US": {
+      "path": "inputs/calendars/us-sessions-20190901-20251231.csv",
+      "sha256": "88f6fb8d828bce278ab0649f5312758d4ee6bf8baa284bc64d2ef74dd21dd314"
+    }
+  },
+  "scenarios": {
+    "smbs": {
+      "snapshot": "selected",
+      "dataset": {
+        "path": "results/actual-research/smbs/datasets/actual-observed-experiment",
+        "sha256": "7a07c022284779252852000af61ffb998542274ed9dd0949ff8a7044e3211dfa"
+      },
+      "fx": {
+        "path": "evidence/fx-korea/smbs-usdkrw-mar-20190901-20251231.csv",
+        "sha256": "126b120c6a566114cbeb31f224e8e7a268a02b69d879d3eead563d9370a8295d"
+      },
+      "fx_dataset_id": "FX_SMBS_MAR",
+      "max_age_days": 7,
+      "direction": "USD/KRW",
+      "unit": "KRW_per_USD",
+      "selected_fx": {
+        "path": "results/actual-research/smbs/selected-observed-FX.csv",
+        "sha256": "5a79647e03c2d75ad99b09829f1a8ee85e0f18b6f47ef5685356ba3a18922f50"
+      },
+      "eligibility": {
+        "path": "results/actual-research/smbs/date-eligibility-all.csv",
+        "sha256": "183acf66633dc13cfe90b546d604a715e4e0c6c3bb56972f96611169adf468c2"
+      }
+    },
+    "alfred": {
+      "snapshot": "selected",
+      "dataset": {
+        "path": "results/actual-research/alfred/datasets/actual-observed-experiment",
+        "sha256": "9cdf2fdd1c0174b8e9d4fe25db49a4363c94c1fa35ec0804a5a127e0a7bd3e0b"
+      },
+      "fx": {
+        "path": "evidence/fx-fred/ALFRED-weekly-vintage-observations.csv",
+        "sha256": "eba081d2d4720b0651f57542bad26a70c4327c013ab037a047fb62808d3ac44c"
+      },
+      "fx_dataset_id": "FX_ALFRED_DEXKOUS",
+      "max_age_days": 14,
+      "direction": "USD/KRW",
+      "unit": "KRW_per_USD",
+      "selected_fx": {
+        "path": "results/actual-research/alfred/selected-observed-FX.csv",
+        "sha256": "a7e3043db838372087431f78787c3226926a96d3078e69dd6004d8c5f366b7cb"
+      },
+      "eligibility": {
+        "path": "results/actual-research/alfred/date-eligibility-all.csv",
+        "sha256": "86e18e1dfe34bc5499f1631f51d4c4973cfd84ba49f8c3ebfbc34023cc63094f"
+      }
+    }
+  }
+}
