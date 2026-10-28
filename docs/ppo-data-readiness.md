@@ -105,3 +105,16 @@ source validation, `training_approved` 또는 분할 마스크를 자동으로 �
 
 관련 작업: [Issue #94](https://github.com/team-broke/Robo-Advisor/issues/94).
 이 문서는 담당자의 변환기를 대체하지 않는다.
+
+## #9·#11 원천 증거 게이트
+
+추가된 [원천 증거 sidecar](source-evidence.md)는 기존 실제 데이터 감사를 재사용하고
+선택 환율을 원문·receipt·해시·빈티지 및 부분 KRX 근거와 연결한다. 보존한 부모의
+`failed`, 연구 원천의 `unverified`, 실제 공개시각의 null과 `training_approved=false`를
+유지한다. #11 metadata 허용 필드를 확장하거나 원본 snapshot을 수정하지 않는다.
+
+공식 DEXKOUS의 뉴욕 정오 fixing과 H.10 일반 발표 일정은 실제 행의 공개시각과
+다르다. ALFRED 수요일 빈티지는 연구 조회일이며 다음날 00:00 New York 이용도
+가정이다. SMBS의 보존 고시 일정이나 해시 일치만으로 이를 실제 공개로 인증하지 않는다.
+#94 변환기 구현·PPO 실행은 이 검증에 포함되지 않으며 원척도·시간축·분할 마스크·
+연속 구간·체결 정책과 source 승인 게이트를 별도로 충족해야 한다.
