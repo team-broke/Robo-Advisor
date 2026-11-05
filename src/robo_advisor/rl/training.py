@@ -495,6 +495,17 @@ def run_training(
     write_manifest()
     vec = None
     model = None
+    # 진행 상태 파일은 학습 모니터와 실험 대기열이 읽는다.
+    progress = ProgressCallback(
+        config.total_timesteps,
+        interval_seconds=log_interval,
+        checkpoint_calls=save_calls,
+        checkpoint_dir=checkpoints,
+        status_path=artifact_dir / "status.json",
+        run_id=run_id,
+        validator=validator,
+    )
+    progress.write_status()
     try:
         LOGGER.info("환경 %d개와 PPO 모델 구성 중", config.n_envs)
         factories = [
@@ -524,12 +535,7 @@ def run_training(
         )
         callbacks = [
             CheckpointCallback(save_freq=save_calls, save_path=str(checkpoints)),
-            ProgressCallback(
-                config.total_timesteps,
-                interval_seconds=log_interval,
-                checkpoint_calls=save_calls,
-                checkpoint_dir=checkpoints,
-            ),
+            progress,
         ]
         if validator is not None:
             callbacks.append(validator)
@@ -573,6 +579,7 @@ def run_training(
         manifest["finished_at"] = _utc_now()
         manifest["actual_timesteps"] = int(model.num_timesteps) if model is not None else 0
         manifest["checkpoint_paths"] = [str(path) for path in sorted(checkpoints.glob("*.zip"))]
+        progress.write_status(manifest["status"], manifest.get("error"))
         if validator is not None:
             manifest["validation"]["history"] = validator.history
             manifest["validation"]["best"] = validator.best

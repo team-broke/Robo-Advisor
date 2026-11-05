@@ -1,0 +1,33 @@
+# 실험 대기열 예시. 복사해서 학습 PC에 두고 경로·실험을 바꿔 쓴다.
+# 실행: python -m robo_advisor.ops.queue run <이 파일>
+# 상태: python -m robo_advisor.ops.queue status <이 파일>
+queue_id: nightly
+defaults:
+  device: cuda
+  log_interval: 30
+  smoke: false
+# 한 실험이 실패하면 멈출지 여부. false면 다음 실험을 계속한다.
+stop_on_failure: false
+jobs:
+  # config는 기준 학습 설정 경로(상대 경로는 이 파일 위치 기준), overrides는 그 위에 덮어쓸 값이다.
+  - run_id: overfit-steps200k
+    config: ../training.yaml
+    overrides:
+      total_timesteps: 200000
+  - run_id: overfit-small-net
+    config: ../training.yaml
+    overrides:
+      total_timesteps: 200000
+      ppo:
+        net_arch:
+          pi: [64, 64]
+          vf: [64, 64]
+  - run_id: overfit-entropy
+    config: ../training.yaml
+    overrides:
+      total_timesteps: 200000
+      ppo:
+        ent_coef: 0.01
+    # 학습 성공 후 실행할 명령. {run_id}, {artifact_dir}를 치환한다.
+    after:
+      - echo "finished {run_id} -> {artifact_dir}"
