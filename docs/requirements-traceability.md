@@ -160,15 +160,15 @@
 
 #### FR-09. PPO 정책의 SHAP 설명과 Summary·Force Plot
 
-상태: ❌ 미구현
+상태: ⏳ 설명 입력 계약 구현 · SHAP 계산과 시각화 후행 대기
 
 관련 Issue: #39 · #40 · #41
 
-구현: 미구현
+구현: [`policy.py`](../src/robo_advisor/explain/policy.py)의 고정 Gaussian mean action·자산별 callable·관측 레이아웃과 [`background.py`](../src/robo_advisor/explain/background.py)의 결정론적 fit 구간 관측 재생·조기 종료 차단·기대 층 누락 검사·학습 구간 전용 층화 배경집합. 계약·예제는 [`ppo-policy-explanation.md`](ppo-policy-explanation.md). SHAP 전체 계산·캐시(#40)와 플롯(#41)은 미구현이다.
 
-테스트/검증: 미구현
+테스트/검증: [`test_policy_explanation.py`](../tests/test_policy_explanation.py)의 실제 SB3 정책·작은 KernelSHAP 호출·환경 비중 일치·저장/로드, [`test_explanation_background.py`](../tests/test_explanation_background.py)의 층화 재현·fit 구간 밖 데이터 오염 누수 회귀.
 
-증빙 산출물: SHAP 캐시와 plot 예정
+증빙 산출물: 재현 가능한 설명 함수와 배경집합 ID. 실제 금융 모델의 SHAP 캐시·Summary/Force Plot은 #40·#41에서 생성할 예정이다.
 
 #### FR-10. 시장 국면별 ANOVA 3종, 가정 진단과 Tukey HSD
 
