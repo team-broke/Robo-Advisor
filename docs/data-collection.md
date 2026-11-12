@@ -1,5 +1,9 @@
 # 금융 데이터 수집 계약 (#9)
 
+> 이 문서의 후보 유니버스 설명은 `config/assets.yaml`에 해당한다. 확정 12자산의
+> 별도 명세는 `config/assets_team12.yaml`이며, 최신 원천 검증 결과와 공개시각·가격
+> 정의의 한계는 [원천 증거 검증](source-evidence.md)을 참조한다.
+
 ## 구현 범위와 현재 상태
 
 `config/assets.yaml`과 `robo_advisor.data.collectors`는 데이터셋 명세를 읽고,

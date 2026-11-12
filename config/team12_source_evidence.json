@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "base_audit_config": "team12_audit.json",
+  "candidate_snapshot": {
+    "path": "inputs/krx-candidates/20261016T182032936411Z_d2ca65f3733843e0a8be2557eed19d4c",
+    "sha256": "e5e932b529727be933f98321dc813563a9892aefbfd48930b53253d667ab3692"
+  },
+  "ktb_original": {
+    "path": "evidence/official-KRX-originals/KRX_148070_20200310.csv",
+    "sha256": "95a6bced1f66c5429524ee23f56354742e8ff4194ca9db739997d457e137074e"
+  },
+  "fx_indexes": {
+    "smbs": {
+      "path": "evidence/fx-korea/evidence-manifest.json",
+      "sha256": "00562651fa961e9263e049c7c1402326dcdef214c9ef8fbec5fe3f6f5f437194"
+    },
+    "alfred": {
+      "path": "evidence/fx-fred/fx-evidence-index.json",
+      "sha256": "a426c30a2f788d31f272a7ed774dd5e82c83e935e4335a794ed575d28ccdc518"
+    }
+  }
+}
