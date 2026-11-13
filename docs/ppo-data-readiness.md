@@ -94,6 +94,11 @@ source validation, `training_approved` 또는 분할 마스크를 자동으로 �
 
 ## 코드 근거
 
+- `src/robo_advisor/features/ppo_input.py`: `convert_ppo_inputs`와
+  `window_to_data_config`가 #94 변환·Window 연결을 구현한다.
+  CLI는 `python -m robo_advisor.features.ppo_input <피처 폴더> <새 출력 폴더>`이며,
+  불연속 구간이 여러 개면 `--run-id`로 선택한다. Validation/Test 문맥은 선택한
+  연속 구간 안에서만 빌리고 불완전 분할은 거부한다. 형식 변환은 학습 승인이 아니다.
 - `src/robo_advisor/features/dataset.py`: `_FEATURES`, `_validated_alignment`,
   `_window_features`, `build_feature_dataset`.
 - `src/robo_advisor/features/dataset_io.py`: `read_feature_dataset` 및 원척도·해시 계약.
