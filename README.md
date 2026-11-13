@@ -33,6 +33,14 @@ docker compose up
 - API: http://localhost:8000 (Swagger UI: `/docs`)
 - 대시보드: http://localhost:8501
 
+WSL Ubuntu의 NVIDIA GPU 학습 PC에서는 Python 3.10 venv를 활성화한 뒤
+`bash scripts/install_cuda_torch.sh`를 실행한다. 먼저 `requirements.txt`를 설치하고,
+그 파일의 torch 고정 버전을 `torch==<버전>+<cuda>`로 지정해 CUDA 인덱스에서 교체한다.
+의존성 해석을 유지해 빠진 NVIDIA 런타임 패키지를 설치하고, 이미 만족된 의존성은 재설치하지 않는다.
+기본값은 `cu130`이며 `--cuda cu128` 또는 `TORCH_CUDA_VARIANT=cu128`로 변경한다.
+`--dry-run`은 설치·GPU 검사 없이 명령을 확인한다. 실제 실행은 torch 버전·CUDA 가용성·
+장치 이름을 출력하고, CUDA를 사용할 수 없거나 요청한 휠 버전과 다르면 실패한다.
+
 ## 확정된 설계 결정
 
 | 항목 | 확정값 |
