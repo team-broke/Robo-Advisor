@@ -125,7 +125,7 @@ def test_optimize_rejects_missing_or_naive_timestamp(payload):
 def test_unconfigured_service_returns_503():
     response = client().post("/optimize", json={"as_of": AS_OF})
     assert response.status_code == 503
-    assert response.json()["detail"] == "optimizer is not loaded"
+    assert response.json()["code"] == "service_unavailable"
 
 
 def test_service_unavailable_error_returns_503():
@@ -135,7 +135,7 @@ def test_service_unavailable_error_returns_503():
 
     response = client(optimizer=Down()).post("/optimize", json={"as_of": AS_OF})
     assert response.status_code == 503
-    assert response.json()["detail"] == "model warming up"
+    assert response.json()["code"] == "service_unavailable"
 
 
 def test_explain_returns_top_contributions_by_magnitude():
@@ -223,7 +223,14 @@ def test_backtest_rejects_unknown_strategy():
 def test_openapi_documents_examples_for_every_endpoint():
     schema = client().get("/openapi.json").json()
     paths = schema["paths"]
-    assert set(paths) == {"/health", "/optimize", "/explain", "/research", "/backtest"}
+    assert set(paths) == {
+        "/health",
+        "/optimize",
+        "/explain",
+        "/research",
+        "/backtest",
+        "/research/jobs/{job_id}",
+    }
     for path, method in [("/optimize", "post"), ("/explain", "post"), ("/research", "post")]:
         body = paths[path][method]["requestBody"]["content"]["application/json"]
         ref = body["schema"]["$ref"].rsplit("/", 1)[-1]
