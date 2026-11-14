@@ -57,7 +57,7 @@
 | FR-08 | LangGraph Agentic RAG, self-correction, reasoning trace와 리스크 태그의 RL 연계 | #34 · #35 · #36 · #37 · #38 | ⏳ 후행 작업 대기 |
 | FR-09 | PPO 정책의 SHAP 설명과 Summary·Force Plot | #39 · #40 · #41 | ❌ 미구현 |
 | FR-10 | 시장 국면별 ANOVA 3종, 가정 진단과 Tukey HSD | #42 · #43 · #44 · #45 | ⏳ 후행 작업 대기 |
-| FR-11 | FastAPI 5개 엔드포인트, 사전 로드·캐시·오류 추적 | #46 · #47 · #48 · #49 | ❌ 미구현 |
+| FR-11 | FastAPI 5개 엔드포인트, 사전 로드·캐시·오류 추적 | #46 · #47 · #48 · #49 | ⏳ 후행 작업 대기 |
 | FR-12 | HTTP 전용 Streamlit 대시보드와 Docker 배포 | #50 · #51 · #52 · #53 · #54 · #55 | ❌ 미구현 |
 
 ### 2.2 상세
@@ -184,13 +184,13 @@
 
 #### FR-11. FastAPI 5개 엔드포인트, 사전 로드·캐시·오류 추적
 
-상태: ❌ 미구현
+상태: ⏳ 후행 작업 대기
 
 관련 Issue: #46 · #47 · #48 · #49
 
-구현: 미구현
+구현: [`app.py`](../src/robo_advisor/api/app.py)의 /health·/optimize·/explain·/research·/backtest, [`schemas.py`](../src/robo_advisor/api/schemas.py)의 요청·응답 스키마와 Swagger 예제, [`services.py`](../src/robo_advisor/api/services.py)의 서비스 계약과 사전 계산 SHAP 조회 어댑터. /research는 캐시 적중 200 / 미적중 202 job 분기. 모델·산출물 사전 로드와 job 큐(#47), 지연 테스트(#48), 로깅(#49)은 미구현이다.
 
-테스트/검증: 미구현
+테스트/검증: [`test_api.py`](../tests/test_api.py)
 
 증빙 산출물: API 응답·지연 측정·로그 산출물 예정
 
