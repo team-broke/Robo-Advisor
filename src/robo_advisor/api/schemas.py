@@ -158,3 +158,18 @@ class ResearchJobStatus(BaseModel):
     status: Literal["queued", "running", "completed", "failed"]
     result: ResearchResult | None = None
     failure_reason: str | None = None
+    correlation_id: str | None = Field(default=None, description="최초 제출 요청의 correlation ID")
+
+
+class ErrorResponse(BaseModel):
+    model_config = _examples(
+        {
+            "code": "service_unavailable",
+            "message": "Service is unavailable",
+            "correlation_id": "request-123",
+        }
+    )
+
+    code: str
+    message: str
+    correlation_id: str

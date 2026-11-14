@@ -117,6 +117,19 @@ class PolicyOptimizer:
         wrapper.layout.as_batch(observations)
         self.wrapper, self.observations = wrapper, observations.copy(deep=True)
         self.model_id, self.risk_tags = model_id, tuple(risk_tags)
+        from robo_advisor.api.observability import visible_risk_tags
+
+        for timestamp, row in self.observations.iterrows():
+            scores = {
+                tag.asset: tag.risk_score for tag in visible_risk_tags(self.risk_tags, timestamp)
+            }
+            if any(
+                not np.isclose(
+                    row[f"risk_score__{asset}"], scores.get(asset, 0.0), rtol=1e-6, atol=1e-8
+                )
+                for asset in wrapper.layout.assets
+            ):
+                raise ValueError("risk observation does not match source tag traces")
         self._lock = Lock()
 
     def optimize(self, as_of):

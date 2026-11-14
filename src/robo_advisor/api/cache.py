@@ -19,6 +19,13 @@ from pydantic import TypeAdapter
 
 from robo_advisor.api.schemas import ResearchJobStatus
 from robo_advisor.api.services import NotFoundError, ServiceUnavailableError
+from robo_advisor.api.observability import (
+    correlation_context,
+    get_correlation_id,
+    log_event,
+    log_research_result,
+    sanitize_log,
+)
 from robo_advisor.research.contracts import ResearchResult
 from robo_advisor.research.trace import redact
 from robo_advisor.schemas.common import UTCDateTime
@@ -161,6 +168,7 @@ class ResearchCache:
                 )
                 for path in files[: -self.max_entries]:
                     path.unlink()
+            return result
 
 
 class ResearchJobs:
@@ -190,7 +198,13 @@ class ResearchJobs:
             if self._closed:
                 raise ServiceUnavailableError("research queue is closed")
             if key.digest in self._by_key:
-                return self._by_key[key.digest]
+                existing = self._jobs[self._by_key[key.digest]]
+                log_event(
+                    "research_job_reused",
+                    job_id=existing.job_id,
+                    origin_correlation_id=existing.correlation_id,
+                )
+                return existing.job_id
             if len(self._jobs) >= self.max_jobs:
                 victim = next(
                     (
@@ -207,8 +221,13 @@ class ResearchJobs:
                     digest: job_id for digest, job_id in self._by_key.items() if job_id != victim
                 }
             job_id = str(uuid4())
-            self._jobs[job_id] = ResearchJobStatus(job_id=job_id, status="queued")
+            origin = get_correlation_id() or str(uuid4())
+            self._jobs[job_id] = ResearchJobStatus(
+                job_id=job_id, status="queued", correlation_id=origin
+            )
             self._by_key[key.digest] = job_id
+            with correlation_context(origin):
+                log_event("research_job_queued", job_id=job_id, model_id=self.model_id)
             try:
                 self._executor.submit(copy_context().run, self._run, job_id, key)
             except Exception:
@@ -218,20 +237,31 @@ class ResearchJobs:
             return job_id
 
     def _run(self, job_id, key):
+        with correlation_context(self.job(job_id).correlation_id):
+            self._execute(job_id, key)
+
+    def _execute(self, job_id, key):
         with self._lock:
-            self._jobs[job_id] = ResearchJobStatus(job_id=job_id, status="running")
+            if self._closed and self._jobs[job_id].status == "failed":
+                return
+            origin = self._jobs[job_id].correlation_id
+            self._jobs[job_id] = ResearchJobStatus(
+                job_id=job_id, status="running", correlation_id=origin
+            )
+        log_event("research_job_running", job_id=job_id, model_id=self.model_id)
         try:
             result = self.cache.get(key)
             if result is None:
                 result = ResearchResult.model_validate(self.runner(key.question, key.as_of))
+            log_research_result(result, job_id=job_id, model_id=self.model_id)
             if result.status == "failed":
-                reason = redact(";".join(result.reasons), secrets=self.cache.secrets)[:500]
+                reason = sanitize_log(redact(";".join(result.reasons), secrets=self.cache.secrets))[
+                    :500
+                ]
                 final = ResearchJobStatus(job_id=job_id, status="failed", failure_reason=reason)
             else:
-                self.cache.put(key, result)
-                final = ResearchJobStatus(
-                    job_id=job_id, status="completed", result=self.cache.get(key)
-                )
+                stored = self.cache.put(key, result)
+                final = ResearchJobStatus(job_id=job_id, status="completed", result=stored)
         except Exception as error:
             final = ResearchJobStatus(
                 job_id=job_id,
@@ -239,7 +269,10 @@ class ResearchJobs:
                 failure_reason=f"research_error:{type(error).__name__}",
             )
         with self._lock:
-            self._jobs[job_id] = final
+            self._jobs[job_id] = final.model_copy(update={"correlation_id": origin})
+        log_event(
+            "research_job_finished", job_id=job_id, model_id=self.model_id, status=final.status
+        )
 
     def job(self, job_id):
         with self._lock:
@@ -249,5 +282,12 @@ class ResearchJobs:
 
     def close(self):
         with self._lock:
+            if self._closed:
+                return
             self._closed = True
-        self._executor.shutdown(wait=True)
+            for job_id, job in list(self._jobs.items()):
+                if job.status == "queued":
+                    self._jobs[job_id] = job.model_copy(
+                        update={"status": "failed", "failure_reason": "service_shutting_down"}
+                    )
+        self._executor.shutdown(wait=True, cancel_futures=True)
