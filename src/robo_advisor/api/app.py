@@ -21,6 +21,7 @@ from robo_advisor.api.schemas import (
     OptimizeRequest,
     OptimizeResponse,
     ResearchJob,
+    ResearchJobStatus,
     ResearchQuery,
     Strategy,
 )
@@ -46,13 +47,17 @@ def _finite_or_none(value: Any) -> float | None:
     return number if math.isfinite(number) else None
 
 
-def create_app(services: Services | None = None) -> FastAPI:
+def create_app(services: Services | None = None, *, preload_settings=None, loaders=None) -> FastAPI:
+    from robo_advisor.api.lifecycle import make_lifespan
+
     app = FastAPI(
         title="Robo-Advisor API",
         description="PPO 자산배분·SHAP 설명·리서치 근거·백테스트 결과 조회",
         version="0.1.0",
+        lifespan=make_lifespan(services, settings=preload_settings, loaders=loaders),
     )
     app.state.services = services or Services()
+    app.state.service_reasons = {}
 
     @app.exception_handler(NotFoundError)
     def not_found(request: Request, error: NotFoundError) -> JSONResponse:
@@ -62,9 +67,11 @@ def create_app(services: Services | None = None) -> FastAPI:
     def unavailable(request: Request, error: ServiceUnavailableError) -> JSONResponse:
         return JSONResponse({"detail": str(error)}, status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
 
-    @app.get("/health", tags=["system"])
-    def health(services: ServicesDep) -> HealthResponse:
-        return HealthResponse(status="ok", services=services.loaded())
+    @app.get("/health", tags=["system"], response_model_exclude_defaults=True)
+    def health(request: Request, services: ServicesDep) -> HealthResponse:
+        return HealthResponse(
+            status="ok", services=services.loaded(), reasons=request.app.state.service_reasons
+        )
 
     @app.post("/optimize", tags=["allocation"])
     def optimize(body: OptimizeRequest, services: ServicesDep) -> OptimizeResponse:
@@ -117,6 +124,12 @@ def create_app(services: Services | None = None) -> FastAPI:
         job = ResearchJob(job_id=service.submit(body.question, body.as_of), status="queued")
         return JSONResponse(job.model_dump(), status_code=status.HTTP_202_ACCEPTED)
 
+    @app.get("/research/jobs/{job_id}", tags=["research"])
+    def research_job(job_id: str, services: ServicesDep) -> ResearchJobStatus:
+        service = _require(services.research, "research")
+        lookup = _require(getattr(service, "job", None), "research job lookup")
+        return lookup(job_id)
+
     @app.get("/backtest", tags=["backtest"])
     def backtest(
         strategy: Annotated[Strategy, Query(description="전략 이름")],
@@ -131,5 +144,5 @@ def create_app(services: Services | None = None) -> FastAPI:
     return app
 
 
-# `uvicorn robo_advisor.api.app:app` 진입점. 서비스 로드는 #47에서 연결한다.
+# `uvicorn robo_advisor.api.app:app` 진입점. 산출물 로드는 lifespan에서 수행한다.
 app = create_app()

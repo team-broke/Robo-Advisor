@@ -223,7 +223,14 @@ def test_backtest_rejects_unknown_strategy():
 def test_openapi_documents_examples_for_every_endpoint():
     schema = client().get("/openapi.json").json()
     paths = schema["paths"]
-    assert set(paths) == {"/health", "/optimize", "/explain", "/research", "/backtest"}
+    assert set(paths) == {
+        "/health",
+        "/optimize",
+        "/explain",
+        "/research",
+        "/backtest",
+        "/research/jobs/{job_id}",
+    }
     for path, method in [("/optimize", "post"), ("/explain", "post"), ("/research", "post")]:
         body = paths[path][method]["requestBody"]["content"]["application/json"]
         ref = body["schema"]["$ref"].rsplit("/", 1)[-1]
