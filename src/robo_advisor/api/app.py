@@ -10,13 +10,15 @@ import math
 from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from robo_advisor.api.schemas import (
     BacktestResponse,
     ExplainRequest,
     ExplainResponse,
     ErrorResponse,
+    DashboardResponse,
+    DashboardSection,
     FeatureContribution,
     HealthResponse,
     OptimizeRequest,
@@ -150,6 +152,21 @@ def create_app(services: Services | None = None, *, preload_settings=None, loade
         summary = store.get(strategy, window)
         metrics = {name: _finite_or_none(value) for name, value in summary["metrics"].items()}
         return BacktestResponse(**{**summary, "metrics": metrics})
+
+    @app.get("/dashboard/{section}", tags=["dashboard"])
+    def dashboard_section(section: DashboardSection, services: ServicesDep) -> DashboardResponse:
+        store = _require(services.dashboard, "dashboard")
+        return store.get(section)
+
+    @app.get(
+        "/dashboard/{section}/plots/{plot_id}",
+        tags=["dashboard"],
+        responses={200: {"content": {"image/png": {}}, "description": "사전 계산 PNG"}},
+    )
+    def dashboard_plot(section: DashboardSection, plot_id: str, services: ServicesDep):
+        store = _require(services.dashboard, "dashboard")
+        content, digest = store.plot(section, plot_id)
+        return Response(content, media_type="image/png", headers={"ETag": digest})
 
     install_observability(app)
     return app

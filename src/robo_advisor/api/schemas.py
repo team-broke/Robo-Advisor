@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from robo_advisor.schemas.common import NonEmptyString, PortfolioWeights, UTCDateTime
 from robo_advisor.research.contracts import ResearchResult
@@ -173,3 +173,34 @@ class ErrorResponse(BaseModel):
     code: str
     message: str
     correlation_id: str
+
+
+DashboardSection = Literal["portfolio", "rl_performance", "shap", "anova", "risk_monitor"]
+
+
+class DashboardPlot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
+    title: str
+    role: str
+
+
+class DashboardResponse(BaseModel):
+    """사전 계산 산출물의 시점·버전과 화면 표시용 값."""
+
+    model_config = _examples(
+        {
+            "section": "portfolio",
+            "as_of": AS_OF_EXAMPLE,
+            "model_id": None,
+            "artifact_version": "a" * 64,
+            "data": {"weights": None, "cumulative_returns": []},
+            "plots": [],
+        }
+    )
+    section: DashboardSection
+    as_of: UTCDateTime
+    model_id: str | None = None
+    artifact_version: str = Field(pattern=r"^[a-f0-9]{64}$")
+    data: dict[str, JsonValue]
+    plots: list[DashboardPlot] = Field(default_factory=list)
