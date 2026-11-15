@@ -100,7 +100,13 @@ def test_health_reports_which_services_are_loaded():
     assert response.status_code == 200
     assert response.json() == {
         "status": "ok",
-        "services": {"optimizer": True, "explainer": False, "research": False, "backtests": False},
+        "services": {
+            "optimizer": True,
+            "explainer": False,
+            "research": False,
+            "backtests": False,
+            "dashboard": False,
+        },
     }
 
 
@@ -230,6 +236,8 @@ def test_openapi_documents_examples_for_every_endpoint():
         "/research",
         "/backtest",
         "/research/jobs/{job_id}",
+        "/dashboard/{section}",
+        "/dashboard/{section}/plots/{plot_id}",
     }
     for path, method in [("/optimize", "post"), ("/explain", "post"), ("/research", "post")]:
         body = paths[path][method]["requestBody"]["content"]["application/json"]
