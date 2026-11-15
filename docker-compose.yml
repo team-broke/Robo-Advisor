@@ -1,0 +1,47 @@
+# docker compose up --build 로 API와 대시보드를 함께 띄운다.
+# 산출물은 읽기 전용으로 마운트하고, 경로·해시는 API_* 환경변수로 지정한다.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      API_CHECKPOINT_PATH: ${API_CHECKPOINT_PATH:-}
+      API_CHECKPOINT_SHA256: ${API_CHECKPOINT_SHA256:-}
+      API_POLICY_MANIFEST: ${API_POLICY_MANIFEST:-}
+      API_POLICY_MANIFEST_SHA256: ${API_POLICY_MANIFEST_SHA256:-}
+      API_SHAP_DIR: ${API_SHAP_DIR:-}
+      API_SHAP_MANIFEST_SHA256: ${API_SHAP_MANIFEST_SHA256:-}
+      API_BACKTEST_DIR: ${API_BACKTEST_DIR:-}
+      API_BACKTEST_MANIFEST_SHA256: ${API_BACKTEST_MANIFEST_SHA256:-}
+      API_BACKTEST_SUMMARY_SHA256: ${API_BACKTEST_SUMMARY_SHA256:-}
+      API_RESEARCH_MANIFEST: ${API_RESEARCH_MANIFEST:-}
+      API_RESEARCH_MANIFEST_SHA256: ${API_RESEARCH_MANIFEST_SHA256:-}
+      LLM_PROVIDER: ${LLM_PROVIDER:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+    volumes:
+      - ./artifacts:/app/artifacts:ro
+      - ./models:/app/models:ro
+      - ./data:/app/data:ro
+    ports:
+      - "${API_PORT:-8000}:8000"
+    networks: [robo]
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    environment:
+      API_BASE_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${DASHBOARD_PORT:-8501}:8501"
+    networks: [robo]
+    restart: unless-stopped
+
+networks:
+  robo: {}
