@@ -1,0 +1,28 @@
+# 대시보드 이미지. robo_advisor 패키지·모델 의존성 없이 HTTP로만 API에 접근한다.
+FROM python:3.10-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONPATH=/app \
+    API_BASE_URL=http://api:8000
+
+WORKDIR /app
+
+# requirements.txt의 고정 버전을 제약으로만 써서 화면에 필요한 패키지만 설치한다.
+COPY requirements.txt /tmp/requirements.txt
+RUN grep -v '^--' /tmp/requirements.txt > /tmp/constraints.txt \
+    && pip install -c /tmp/constraints.txt streamlit httpx pandas matplotlib plotly \
+    && rm /tmp/requirements.txt /tmp/constraints.txt \
+    && useradd --create-home --uid 10001 app
+
+COPY dashboard ./dashboard
+
+USER app
+EXPOSE 8501
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=4)"
+
+CMD ["streamlit", "run", "dashboard/app.py", "--server.address=0.0.0.0", "--server.port=8501", "--server.headless=true", "--browser.gatherUsageStats=false"]
