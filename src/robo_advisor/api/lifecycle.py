@@ -36,7 +36,11 @@ class PreloadSettings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_prefix="API_", env_file=".env", extra="ignore", hide_input_in_errors=True
+        env_prefix="API_",
+        env_file=".env",
+        env_ignore_empty=True,
+        extra="ignore",
+        hide_input_in_errors=True,
     )
     checkpoint_path: Path | None = None
     checkpoint_sha256: str | None = Field(default=None, pattern=_DIGEST)
