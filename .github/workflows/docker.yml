@@ -1,0 +1,36 @@
+name: Docker
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request: {}
+
+concurrency:
+  group: docker-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: 이미지 빌드
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api, dashboard]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: compose 설정 검증
+        run: docker compose config --quiet
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: ${{ matrix.service }} 빌드
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.${{ matrix.service }}
+          push: false
+          tags: robo-advisor-${{ matrix.service }}:ci
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
