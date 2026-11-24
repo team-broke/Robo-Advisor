@@ -1,0 +1,31 @@
+# Window별 완전 재학습 설정. 상대 경로는 이 파일 위치 기준이다.
+base_training_config: ../training.yaml
+experiment_id: walk-forward
+datasets:
+  main: ../../data/processed
+split:
+  start_date: 2020-01-01T00:00:00+09:00
+  train_years: 4
+  test_years: 1
+  min_windows: 2
+  # 수집 범위가 연말까지면 마지막 평가 연도를 포함하도록 배타적 끝을 명시한다.
+  coverage_start: 2020-01-01T00:00:00+09:00
+  coverage_end: 2026-01-01T00:00:00+09:00
+validation_years: 1
+variants:
+  - name: return
+    reward_variant: return
+  - name: sharpe
+    reward_variant: sharpe
+  - name: mdd-l0.5
+    reward_variant: mdd_penalty
+    penalty_lambda: 0.5
+  - name: mdd-l1
+    reward_variant: mdd_penalty
+    penalty_lambda: 1.0
+  - name: mdd-l2
+    reward_variant: mdd_penalty
+    penalty_lambda: 2.0
+seeds: [42, 43, 44]
+total_timesteps: 2000000
+evaluate_model: best
