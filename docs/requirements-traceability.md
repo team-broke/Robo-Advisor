@@ -176,9 +176,9 @@
 
 관련 Issue: #42 · #43 · #44 · #45
 
-구현: 시장 국면 라벨러는 [`regimes.py`](../src/robo_advisor/experiments/regimes.py)에 존재한다. ANOVA 표본 구성(#42), 검정·가정 진단(#44), Tukey HSD·시각화(#45)는 미구현이다.
+구현: 시장 국면 라벨러는 [`regimes.py`](../src/robo_advisor/experiments/regimes.py), 검정·가정 진단·Tukey HSD는 [`anova.py`](../src/robo_advisor/experiments/anova.py)(#44, #45, PR #121), 평가 프로토콜 7·8절의 표본 구성은 [`anova_samples.py`](../src/robo_advisor/experiments/anova_samples.py)(#42)에 있다. 실제 학습·백테스트 결과로 만든 표본과 검정 결과는 아직 없다.
 
-테스트/검증: [`test_regimes.py`](../tests/test_regimes.py)
+테스트/검증: [`test_regimes.py`](../tests/test_regimes.py) · [`test_anova.py`](../tests/test_anova.py) · [`test_anova_samples.py`](../tests/test_anova_samples.py)
 
 증빙 산출물: 시장 국면 라벨러 병합 PR #76. ANOVA 표·진단·사후검정 시각화 예정
 
