@@ -53,6 +53,8 @@ class PreloadSettings(BaseSettings):
     research_workers: int = Field(default=2, ge=1, le=32)
     research_max_jobs: int = Field(default=128, ge=1, le=10000)
     research_cache_entries: int = Field(default=128, ge=1, le=10000)
+    dashboard_manifest: Path | None = None
+    dashboard_manifest_sha256: str | None = Field(default=None, pattern=_DIGEST)
 
 
 def _manifest(path, expected):
@@ -339,6 +341,7 @@ def preload_services(settings=None, *, loaders=None):
         "explainer": _load_explainer,
         "research": _load_research,
         "backtests": _load_backtests,
+        "dashboard": _load_dashboard,
     }
     if loaders:
         if not set(loaders).issubset(defaults):
@@ -371,3 +374,9 @@ def make_lifespan(injected=None, *, settings=None, loaders=None):
                     research.close()
 
     return lifespan
+
+
+def _load_dashboard(settings):
+    from robo_advisor.api.dashboard_artifacts import DashboardArtifacts
+
+    return DashboardArtifacts.load(settings.dashboard_manifest, settings.dashboard_manifest_sha256)

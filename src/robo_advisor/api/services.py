@@ -49,6 +49,14 @@ class BacktestStore(Protocol):
         """저장된 백테스트 요약(strategy·window·start·end·metrics)을 반환한다."""
 
 
+class DashboardStore(Protocol):
+    def get(self, section: str) -> dict:
+        """사전 계산 화면 JSON을 반환한다."""
+
+    def plot(self, section: str, plot_id: str) -> tuple[bytes, str]:
+        """사전 로드한 PNG와 SHA256을 반환한다."""
+
+
 @dataclass(frozen=True)
 class Services:
     """로드되지 않은 서비스는 None이며 해당 엔드포인트는 503을 반환한다."""
@@ -57,6 +65,7 @@ class Services:
     explainer: Explainer | None = None
     research: ResearchService | None = None
     backtests: BacktestStore | None = None
+    dashboard: DashboardStore | None = None
 
     def loaded(self) -> dict[str, bool]:
         return {field.name: getattr(self, field.name) is not None for field in fields(self)}
