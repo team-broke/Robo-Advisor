@@ -22,6 +22,9 @@ services:
       LLM_PROVIDER: ${LLM_PROVIDER:-}
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_API_KEY: ${LLM_API_KEY:-}
+      NAVER_CLIENT_ID: ${NAVER_CLIENT_ID:-}
+      NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-}
+      DART_API_KEY: ${DART_API_KEY:-}
     volumes:
       - ./artifacts:/app/artifacts:ro
       - ./models:/app/models:ro

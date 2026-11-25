@@ -20,7 +20,7 @@ import re
 import unicodedata
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +29,8 @@ import numpy as np
 from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
 from chromadb.config import Settings as ChromaSettings
 
+from robo_advisor.research.contracts import DartBodyEvidence
+from robo_advisor.research.dart_body import BodyChunk, sha256
 from robo_advisor.research.ingestion import ResearchDocument, load_documents
 
 COLLECTION_NAME = "research-documents"
@@ -78,7 +80,8 @@ class HashingEmbeddingFunction(EmbeddingFunction[Documents]):
 
 
 def _timestamp(value: datetime) -> int:
-    return int(value.timestamp() * 1_000_000)
+    elapsed = value - datetime(1970, 1, 1, tzinfo=timezone.utc)
+    return (elapsed.days * 86400 + elapsed.seconds) * 1_000_000 + elapsed.microseconds
 
 
 def document_metadata(document: ResearchDocument) -> dict[str, str | int]:
@@ -119,6 +122,7 @@ class SearchHit:
     source: str
     published_at: str
     available_at: str
+    body: DartBodyEvidence | None = None
 
 
 class ResearchVectorStore:
@@ -165,8 +169,36 @@ class ResearchVectorStore:
 
     def index(self, documents: Iterable[ResearchDocument]) -> IndexResult:
         """새 문서만 추가하고 같은 문서는 건너뛰며 소급 변경은 거부한다."""
-        documents = list(documents)
-        ids = [document.doc_id for document in documents]
+        return self._index(
+            (item.doc_id, f"{item.title}\n{item.summary}", document_metadata(item))
+            for item in documents
+        )
+
+    def index_body(self, chunks: Iterable[BodyChunk]) -> IndexResult:
+        records = []
+        for item in chunks:
+            citation = item.citation
+            body = citation.body
+            metadata = {
+                "url": str(citation.url),
+                "title": item.title,
+                "summary": item.summary,
+                "source": "dart",
+                "source_name": "dart",
+                "published_at": citation.published_at.isoformat(),
+                "available_at": citation.available_at.isoformat(),
+                "available_at_us": _timestamp(citation.available_at),
+                "content_hash": sha256(item.model_dump_json().encode("utf-8")),
+                "body": body.model_dump_json(),
+            }
+            # Embed section and exact excerpt; the listing summary remains a separate field.
+            text = f"{item.title}\n{body.section}\n{body.quote}"
+            records.append((citation.doc_id, text, metadata))
+        return self._index(records)
+
+    def _index(self, records):
+        records = list(records)
+        ids = [doc_id for doc_id, _, _ in records]
         if len(set(ids)) != len(ids):
             raise ValueError("documents contain duplicate doc_id values")
         stored = {}
@@ -174,25 +206,22 @@ class ResearchVectorStore:
             found = self.collection.get(ids=ids, include=["metadatas"])
             stored = dict(zip(found["ids"], found["metadatas"]))
         new, unchanged = [], []
-        for document in documents:
-            metadata = document_metadata(document)
-            previous = stored.get(document.doc_id)
+        for doc_id, text, metadata in records:
+            previous = stored.get(doc_id)
             if previous is None:
-                new.append((document, metadata))
+                new.append((doc_id, text, metadata))
                 continue
             for key in ("available_at_us", "content_hash"):
                 if previous.get(key) != metadata[key]:
-                    raise ValueError(
-                        f"document {document.doc_id} is already indexed with a different {key}"
-                    )
-            unchanged.append(document.doc_id)
+                    raise ValueError(f"document {doc_id} is already indexed with a different {key}")
+            unchanged.append(doc_id)
         if new:
             self.collection.add(
-                ids=[document.doc_id for document, _ in new],
-                documents=[f"{document.title}\n{document.summary}" for document, _ in new],
-                metadatas=[metadata for _, metadata in new],
+                ids=[doc_id for doc_id, _, _ in new],
+                documents=[text for _, text, _ in new],
+                metadatas=[metadata for _, _, metadata in new],
             )
-        return IndexResult(tuple(document.doc_id for document, _ in new), tuple(unchanged))
+        return IndexResult(tuple(doc_id for doc_id, _, _ in new), tuple(unchanged))
 
     def missing_provenance(self) -> tuple[str, ...]:
         """원문 URL 등 필수 메타데이터가 빠진 레코드 ID."""
@@ -222,7 +251,12 @@ class ResearchVectorStore:
             result["metadatas"][0],
             result["distances"][0],
         ):
-            summary = text.split("\n", 1)[1] if "\n" in text else ""
+            body = (
+                DartBodyEvidence.model_validate_json(metadata["body"])
+                if "body" in metadata
+                else None
+            )
+            summary = metadata["summary"] if body else text.partition("\n")[2]
             hits.append(
                 SearchHit(
                     doc_id=doc_id,
@@ -233,6 +267,7 @@ class ResearchVectorStore:
                     source=metadata["source"],
                     published_at=metadata["published_at"],
                     available_at=metadata["available_at"],
+                    body=body,
                 )
             )
         return tuple(hits)

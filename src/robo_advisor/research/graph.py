@@ -12,8 +12,10 @@ from langgraph.graph import END, StateGraph
 
 from robo_advisor.config import get_settings
 from robo_advisor.research.contracts import (
+    BodyRiskCandidate,
     Citation,
     EvidenceReview,
+    EvidenceScope,
     QueryPlan,
     ResearchClaim,
     ResearchOptions,
@@ -21,9 +23,11 @@ from robo_advisor.research.contracts import (
     ResearchResult,
     Synthesis,
 )
+from robo_advisor.research.dart_body import BodyChunk, is_explicit_risk_excerpt
 from robo_advisor.research.documents import SUMMARY_MAX_LENGTH
-from robo_advisor.research.ingestion import canonical_url
-from robo_advisor.research.llm import HttpResearchLLM, ResearchLLM
+from robo_advisor.research.ingestion import KST, canonical_url
+from robo_advisor.research.llm import HttpResearchLLM, LLMResponseError, ResearchLLM
+from robo_advisor.research.risk_tags import classify_event
 from robo_advisor.research.trace import TraceStep, public_url, redact
 from robo_advisor.research.vector_store import ResearchVectorStore, SearchHit
 
@@ -58,6 +62,18 @@ def _json_response(text, schema):
     return schema.model_validate(data)
 
 
+def _llm_problem(error, fallback):
+    if isinstance(error, LLMResponseError) and error.code in {
+        "authentication",
+        "permission",
+        "model_unavailable",
+        "rate_or_quota_limit",
+        "timeout",
+    }:
+        return (f"llm_{error.code}",)
+    return (fallback,)
+
+
 def run_research(
     question_or_ticker: str,
     as_of,
@@ -65,6 +81,7 @@ def run_research(
     store=None,
     llm: ResearchLLM | None = None,
     options: ResearchOptions | None = None,
+    evidence_scope: EvidenceScope | None = None,
 ) -> ResearchResult:
     """관측 시점까지의 근거만 사용하고 실패를 명시한 인용 결과를 반환한다.
 
@@ -74,19 +91,28 @@ def run_research(
     request = ResearchRequest(question=question_or_ticker, as_of=as_of)
     options = options or ResearchOptions()
     settings = get_settings()
-    secrets = (settings.llm_api_key.get_secret_value(),) if settings.llm_api_key else ()
+    secrets = tuple(
+        item.get_secret_value()
+        for item in (settings.llm_api_key, settings.dart_api_key, settings.naver_client_secret)
+        if item
+    )
     llm = llm if llm is not None else HttpResearchLLM(settings)
     store = store if store is not None else ResearchVectorStore()
     question = redact(request.question, secrets=secrets)
 
     def record(state, step, started, problems, *, query=None, hits=()):
+        tool = "llm"
+        if step == "retrieve":
+            tool = "vector_store"
+        elif step == "synthesize" and evidence_scope == "dart_body":
+            tool = "verified_excerpts"
         return (
             *state["trace"],
             TraceStep.model_validate(
                 redact(
                     {
                         "step": step,
-                        "tool": "vector_store" if step == "retrieve" else "llm",
+                        "tool": tool,
                         "query": state["query"] if query is None else query,
                         "source_ids": [hit.doc_id for hit in hits],
                         "validation": list(problems) or ["passed"],
@@ -114,6 +140,11 @@ def run_research(
                     "url": hit.url,
                     "published_at": hit.published_at,
                     "available_at": hit.available_at,
+                    **(
+                        {"body": {"section": hit.body.section, "quote": hit.body.quote}}
+                        if hit.body
+                        else {}
+                    ),
                 }
                 for hit in hits
             ],
@@ -125,8 +156,8 @@ def run_research(
         try:
             query = redact(generate("plan", state, QueryPlan).query.strip(), secrets=secrets)
             problems = ()
-        except Exception:
-            query, problems = state["query"], ("invalid_plan_response",)
+        except Exception as error:
+            query, problems = state["query"], _llm_problem(error, "invalid_plan_response")
         return {
             "query": query,
             "problems": problems,
@@ -142,12 +173,21 @@ def run_research(
                 try:
                     if redact(hit.doc_id, secrets=secrets) != hit.doc_id:
                         raise ValueError("source ID must not contain sensitive data")
+                    body = getattr(hit, "body", None)
+                    if (evidence_scope == "dart_body") != (body is not None):
+                        raise ValueError("source evidence scope mismatch")
                     citation = Citation(
                         doc_id=redact(hit.doc_id, secrets=secrets),
                         url=public_url(hit.url, secrets=secrets),
                         published_at=hit.published_at,
                         available_at=hit.available_at,
+                        body=body,
                     )
+                    if body is not None:
+                        BodyChunk(citation=citation, title=hit.title, summary=hit.summary)
+                        provenance = body.model_dump(mode="json")
+                        if redact(provenance, secrets=secrets) != provenance:
+                            raise ValueError("body evidence must not contain sensitive data")
                     if (
                         citation.published_at > request.as_of
                         or citation.available_at > request.as_of
@@ -158,7 +198,7 @@ def run_research(
                         rejected.append("low_similarity_excluded")
                         continue
                     url_identity = canonical_url(str(citation.url))
-                    if citation.doc_id in hits or url_identity in urls:
+                    if citation.doc_id in hits or (body is None and url_identity in urls):
                         rejected.append("duplicate_source_excluded")
                         continue
                     urls.add(url_identity)
@@ -171,6 +211,7 @@ def run_research(
                         hit.source,
                         citation.published_at.isoformat(),
                         citation.available_at.isoformat(),
+                        body,
                     )
                 except (ValueError, TypeError, AttributeError):
                     rejected.append("invalid_source_excluded")
@@ -219,8 +260,8 @@ def run_research(
                     problems = ("conflicting_evidence",)
                 elif len(verified) < options.min_evidence:
                     problems = ("insufficient_relevance",)
-            except Exception:
-                problems = ("invalid_verification_response",)
+            except Exception as error:
+                problems = _llm_problem(error, "invalid_verification_response")
         return {
             "problems": problems,
             "verified": verified,
@@ -233,8 +274,8 @@ def run_research(
         try:
             query = redact(generate("rewrite", state, QueryPlan).query.strip(), secrets=secrets)
             problems = ()
-        except Exception:
-            query, problems = state["query"], ("invalid_rewrite_response",)
+        except Exception as error:
+            query, problems = state["query"], _llm_problem(error, "invalid_rewrite_response")
         return {
             "retries": next_state["retries"],
             "query": query,
@@ -245,34 +286,53 @@ def run_research(
     def synthesize(state):
         started, claims = time.monotonic(), ()
         try:
-            synthesis = generate("synthesize", state, Synthesis, state["verified"])
             sources = {
                 hit.doc_id: Citation(
                     doc_id=hit.doc_id,
                     url=hit.url,
                     published_at=hit.published_at,
                     available_at=hit.available_at,
+                    body=hit.body,
                 )
                 for hit in state["verified"]
             }
-            if any(
-                source_id not in sources
-                for claim in synthesis.claims
-                for source_id in claim.source_ids
-            ):
-                raise ValueError("unknown citation")
-            claims = tuple(
-                ResearchClaim(
-                    text=redact(claim.text, secrets=secrets),
-                    citations=tuple(
-                        sources[source_id] for source_id in dict.fromkeys(claim.source_ids)
-                    ),
+            if evidence_scope == "dart_body":
+                claims = tuple(
+                    ResearchClaim(text=item.body.quote, citations=(item,))
+                    for item in sources.values()
                 )
-                for claim in synthesis.claims
-            )
+            else:
+                synthesis = generate("synthesize", state, Synthesis, state["verified"])
+                selected = dict.fromkeys(
+                    source_id for claim in synthesis.claims for source_id in claim.source_ids
+                )
+                if not selected.keys() <= sources.keys():
+                    raise ValueError("unknown citation")
+                if evidence_scope == "dart_listing_metadata":
+                    hits = {hit.doc_id: hit for hit in state["verified"]}
+                    claims = tuple(
+                        ResearchClaim(
+                            text=(
+                                f"접수일 {sources[source_id].published_at.astimezone(KST).date()}"
+                                f" · {hits[source_id].title}"
+                            ),
+                            citations=(sources[source_id],),
+                        )
+                        for source_id in selected
+                    )
+                else:
+                    claims = tuple(
+                        ResearchClaim(
+                            text=redact(claim.text, secrets=secrets),
+                            citations=tuple(
+                                sources[source_id] for source_id in dict.fromkeys(claim.source_ids)
+                            ),
+                        )
+                        for claim in synthesis.claims
+                    )
             problems = ()
-        except Exception:
-            problems = ("invalid_synthesis_or_citations",)
+        except Exception as error:
+            problems = _llm_problem(error, "invalid_synthesis_or_citations")
         return {
             "claims": claims,
             "problems": problems,
@@ -317,12 +377,22 @@ def run_research(
     )
     final = graph.compile().invoke(initial, {"recursion_limit": 8 + options.max_retries * 5})
     failed = bool(final["problems"])
+    claims = () if failed else final["claims"]
+    candidates = []
+    if evidence_scope == "dart_body":
+        for claim in claims:
+            if is_explicit_risk_excerpt(claim.text) and (kind := classify_event(claim.text)):
+                candidates.append(
+                    BodyRiskCandidate(event_type=kind.value, source_id=claim.citations[0].doc_id)
+                )
     return ResearchResult(
+        evidence_scope=evidence_scope,
         trace_id=initial["trace_id"],
         question=question,
         as_of=request.as_of,
         status="failed" if failed else "completed",
-        claims=() if failed else final["claims"],
+        claims=claims,
+        risk_candidates=tuple(candidates),
         reasons=(*final["problems"], "retry_limit_exceeded") if failed else (),
         retries=final["retries"],
         trace=final["trace"],

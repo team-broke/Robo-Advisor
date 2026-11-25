@@ -231,6 +231,7 @@ def test_openapi_documents_examples_for_every_endpoint():
     paths = schema["paths"]
     assert set(paths) == {
         "/health",
+        "/news",
         "/optimize",
         "/explain",
         "/research",
@@ -252,6 +253,10 @@ def test_openapi_documents_examples_for_every_endpoint():
     ]:
         assert schema["components"]["schemas"][name].get("examples"), name
     assert "202" in paths["/research"]["post"]["responses"]
+    assert {parameter["name"] for parameter in paths["/news"]["get"]["parameters"]} == {
+        "query",
+        "limit",
+    }
 
 
 def shap_result():

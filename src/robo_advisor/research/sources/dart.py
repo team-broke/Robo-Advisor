@@ -10,12 +10,11 @@ from robo_advisor.config import get_settings
 from robo_advisor.research.documents import RawDocument, SourceKind
 from robo_advisor.research.sources.http import (
     CollectionResult,
+    DART_LIST_URL,
     PoliteClient,
     SourceError,
     clean_text,
 )
-
-DART_LIST_URL = "https://opendart.fss.or.kr/api/list.json"
 
 
 def _date(value: date | str) -> date:
@@ -31,7 +30,15 @@ def _date(value: date | str) -> date:
 class DartAdapter:
     """자산 매핑은 corp_code별 related_assets 인자로만 받는다."""
 
-    def __init__(self, client: PoliteClient, *, page_count: int = 100):
+    def __init__(
+        self,
+        client: PoliteClient,
+        *,
+        page_count: int = 100,
+        max_pages: int | None = None,
+        settings=None,
+        registered_api=False,
+    ):
         if (
             isinstance(page_count, bool)
             or not isinstance(page_count, int)
@@ -40,6 +47,11 @@ class DartAdapter:
             raise ValueError("DART page_count must be an integer in [1, 100]")
         self.client = client
         self.page_count = page_count
+        if max_pages is not None and (type(max_pages) is not int or max_pages < 1):
+            raise ValueError("DART max_pages must be a positive integer")
+        self.max_pages = max_pages
+        self._settings = settings
+        self._registered_api = registered_api
 
     def fetch(
         self,
@@ -49,7 +61,7 @@ class DartAdapter:
         corp_code: str | None = None,
         related_assets: Mapping[str, Sequence[str]] | None = None,
     ) -> CollectionResult:
-        secret = get_settings().dart_api_key
+        secret = (self._settings or get_settings()).dart_api_key
         if secret is None or not secret.get_secret_value().strip():
             raise SourceError("DART API key is not configured")
         key = secret.get_secret_value()
@@ -67,7 +79,7 @@ class DartAdapter:
         first_log = len(self.client.request_logs)
         documents = []
         page, total_pages = 1, 1
-        while page <= total_pages:
+        while page <= total_pages and (self.max_pages is None or page <= self.max_pages):
             params = {
                 "crtfc_key": key,
                 "bgn_de": start.strftime("%Y%m%d"),
@@ -77,7 +89,11 @@ class DartAdapter:
             }
             if corp_code is not None:
                 params["corp_code"] = corp_code
-            response = self.client.get(DART_LIST_URL, params=params)
+            response = (
+                self.client.get_dart_list(params=params)
+                if self._registered_api
+                else self.client.get(DART_LIST_URL, params=params)
+            )
             try:
                 payload = json.loads(response.content)
                 if not isinstance(payload, dict):
@@ -110,6 +126,9 @@ class DartAdapter:
                         name: self.client.redact(clean_text(str(item.get(name, ""))))
                         for name in ("corp_code", "corp_name", "stock_code", "rcept_no")
                     }
+                    remarks = str(item.get("rm", "")).strip()
+                    if re.fullmatch(r"(?:유|코|채|넥|공|연|정|철)+", remarks):
+                        values["rm"] = remarks
                     report = self.client.redact(clean_text(str(item["report_nm"])))
                     summary = " ".join(
                         str(item.get(name, ""))
@@ -143,4 +162,6 @@ class DartAdapter:
             except (ValueError, TypeError, KeyError, OverflowError):
                 raise SourceError("invalid DART response", self.client.request_logs) from None
             page += 1
-        return CollectionResult(tuple(documents), self.client.request_logs[first_log:])
+        return CollectionResult(
+            tuple(documents), self.client.request_logs[first_log:], provider_status=status
+        )

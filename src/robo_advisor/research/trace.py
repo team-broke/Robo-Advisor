@@ -82,7 +82,7 @@ class TraceStep(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
 
     step: Literal["plan", "retrieve", "verify", "rewrite", "synthesize"]
-    tool: Literal["llm", "vector_store"]
+    tool: Literal["llm", "vector_store", "verified_excerpts"]
     query: str
     source_ids: tuple[NonEmptyString, ...] = ()
     validation: tuple[NonEmptyString, ...]

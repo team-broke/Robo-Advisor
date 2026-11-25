@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any, Protocol
 
 from robo_advisor.research.contracts import ResearchResult
+from robo_advisor.research.sources.naver_news import NaverNewsSearch
 from robo_advisor.schemas.common import PortfolioWeights
 
 
@@ -66,9 +67,14 @@ class Services:
     research: ResearchService | None = None
     backtests: BacktestStore | None = None
     dashboard: DashboardStore | None = None
+    news: NaverNewsSearch | None = None
 
     def loaded(self) -> dict[str, bool]:
-        return {field.name: getattr(self, field.name) is not None for field in fields(self)}
+        return {
+            field.name: getattr(self, field.name) is not None
+            for field in fields(self)
+            if field.name != "news" or self.news is not None
+        }
 
 
 class ShapExplainer:

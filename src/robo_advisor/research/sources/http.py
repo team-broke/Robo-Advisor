@@ -30,6 +30,9 @@ from robo_advisor.research.documents import SUMMARY_MAX_LENGTH, RawDocument
 from robo_advisor.schemas.common import NonEmptyString
 
 ALLOWED_HOSTS = frozenset({"opendart.fss.or.kr", "finance.naver.com"})
+DART_LIST_URL = "https://opendart.fss.or.kr/api/list.json"
+DART_DOCUMENT_URL = "https://opendart.fss.or.kr/api/document.xml"
+DART_ARCHIVE_LIMIT = 20 * 1024**2
 SECRET_KEYS = frozenset({"crtfc_key", "api_key", "access_token", "token", "secret", "key"})
 
 
@@ -60,6 +63,7 @@ class CollectionResult:
     documents: tuple[RawDocument, ...]
     request_logs: tuple[RequestLog, ...]
     skipped: tuple[SkippedItem, ...] = ()
+    provider_status: str | None = None
 
 
 class SourceError(RuntimeError):
@@ -244,7 +248,7 @@ class PoliteClient:
         parts = urlsplit(self.public_url(str(url)))
         return parts.path + ("?" + parts.query if parts.query else "")
 
-    def _send(self, url, kind, robots_allowed):
+    def _send(self, url, kind, robots_allowed, *, max_bytes=None):
         host = url.host
         delay = self._delays.get(host, self.interval)
         previous = self._last.get(host)
@@ -258,14 +262,28 @@ class PoliteClient:
         failed = False
         result = None
         try:
-            response = self._client.get(
-                url,
+            kwargs = dict(
                 headers={"User-Agent": self.user_agent},
                 timeout=self.timeout,
                 follow_redirects=False,
             )
-            status = response.status_code
-            result = HttpResult(response.content, status, self._now())
+            if max_bytes is None:
+                response = self._client.get(url, **kwargs)
+                status, content = response.status_code, response.content
+            else:
+                kwargs["headers"]["Accept-Encoding"] = "identity"
+                with self._client.stream("GET", url, **kwargs) as response:
+                    status = response.status_code
+                    body = bytearray()
+                    if 200 <= status < 300:
+                        if response.headers.get("Content-Encoding", "identity") != "identity":
+                            raise ValueError("unexpected source transfer encoding")
+                        for block in response.iter_bytes(chunk_size=65536):
+                            if len(body) + len(block) > max_bytes:
+                                raise ValueError("source response exceeds size limit")
+                            body.extend(block)
+                    content = bytes(body)
+            result = HttpResult(content, status, self._now())
         except Exception:
             failed = True
         finally:
@@ -323,6 +341,32 @@ class PoliteClient:
                 )
                 raise RobotsDenied("robots policy forbids this request", self.request_logs)
             result = self._send(target, "data", True)
+            if not 200 <= result.status_code < 300:
+                raise SourceError(f"source returned HTTP {result.status_code}", self.request_logs)
+            return result
+
+    def get_dart_list(self, *, params) -> HttpResult:
+        """Use the registered OpenDART API, with the same pacing and log redaction."""
+        return self._get_dart_api(DART_LIST_URL, params)
+
+    def get_dart_document(self, *, receipt: str, key: str) -> HttpResult:
+        """Fetch one registered OpenDART original archive without following redirects."""
+        if not re.fullmatch(r"[0-9]{14}", receipt):
+            raise SourceError("invalid DART receipt")
+        return self._get_dart_api(
+            DART_DOCUMENT_URL, {"crtfc_key": key, "rcept_no": receipt}, DART_ARCHIVE_LIMIT
+        )
+
+    def _get_dart_api(self, endpoint, params, max_bytes=None) -> HttpResult:
+        key = params.get("crtfc_key")
+        if not isinstance(key, str) or not key.strip():
+            raise SourceError("DART API credentials are required")
+        self.register_secret(key)
+        target = httpx.URL(endpoint).copy_merge_params(params)
+        with self._lock:
+            if self._closed:
+                raise SourceError("source client is closed")
+            result = self._send(target, "data", None, max_bytes=max_bytes)
             if not 200 <= result.status_code < 300:
                 raise SourceError(f"source returned HTTP {result.status_code}", self.request_logs)
             return result

@@ -36,6 +36,7 @@ from robo_advisor.api.observability import (
     log_research_result,
 )
 from robo_advisor.research.contracts import ResearchResult
+from robo_advisor.research.sources.naver_news import NewsResults, NewsUnavailable
 
 
 def get_services(request: Request) -> Services:
@@ -76,6 +77,21 @@ def create_app(services: Services | None = None, *, preload_settings=None, loade
         return HealthResponse(
             status="ok", services=services.loaded(), reasons=request.app.state.service_reasons
         )
+
+    @app.get("/news", tags=["news"])
+    def news(
+        response: Response,
+        services: ServicesDep,
+        query: Annotated[str, Query(min_length=1, max_length=100, pattern=r"\S")],
+        limit: Annotated[int, Query(ge=1, le=10)] = 5,
+    ) -> NewsResults:
+        client = _require(services.news, "news")
+        try:
+            result = client.search(query, limit)
+        except NewsUnavailable as error:
+            raise HTTPException(error.status_code, "News provider unavailable") from None
+        response.headers["Cache-Control"] = "no-store"
+        return result
 
     @app.post("/optimize", tags=["allocation"])
     def optimize(body: OptimizeRequest, services: ServicesDep) -> OptimizeResponse:

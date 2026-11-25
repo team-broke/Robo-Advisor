@@ -200,6 +200,13 @@ def source_link(label, url):
 def research_result(result):
     st.subheader("공개 실행 로그")
     st.caption(f"Trace ID: {result.get('trace_id', '미제공')} · 재시도 {result.get('retries', 0)}")
+    is_body = result.get("evidence_scope") == "dart_body"
+    if result.get("evidence_scope") == "dart_listing_metadata":
+        st.info(
+            "실제 OpenDART 공시 목록의 제목과 접수일을 확인했습니다. 공시 본문 분석은 포함되지 않습니다."
+        )
+    elif is_body:
+        st.info("OpenDART 공시 본문 근거 · 검증된 원문 발췌와 원문 링크를 표시합니다.")
     trace = result.get("trace", [])
     if trace:
         keys = ("step", "tool", "query", "source_ids", "validation", "retries", "elapsed_ms")
@@ -216,9 +223,26 @@ def research_result(result):
     for claim in claims:
         if not claim.get("citations"):
             continue
-        st.write(claim["text"])
+        if is_body:
+            st.text(claim["text"])
+        else:
+            st.write(claim["text"])
         for citation in claim["citations"]:
-            source_link(f"{citation['doc_id']} · 공개 {citation['published_at']}", citation["url"])
+            body = citation.get("body")
+            if body:
+                st.caption(f"{body['section']} · {body['member']} · {body['locator']}")
+                st.caption(
+                    f"접수일 {body['receipt_date']} (시각 미확인) · 사용 가능 {citation['available_at']}"
+                )
+                source_link(f"DART 원문 {body['receipt']}", citation["url"])
+            else:
+                source_link(
+                    f"{citation['doc_id']} · 공개 {citation['published_at']}", citation["url"]
+                )
+    if result.get("risk_candidates"):
+        st.caption("위험 이벤트 후보는 점수를 산정하지 않으며 PPO에 반영하지 않습니다.")
+        for candidate in result["risk_candidates"]:
+            st.text(f"{candidate['event_type']} · {candidate['source_id']}")
 
 
 @st.fragment(run_every="2s")
@@ -291,6 +315,35 @@ def render_research(client):
         st.caption(f"최근 Job ID: {st.session_state.research_last_job}")
     if st.session_state.get("correlation_id"):
         st.caption(f"추적 ID: {st.session_state.correlation_id}")
+    render_news(client)
+
+
+def render_news(client):
+    st.divider()
+    st.subheader("네이버 검색 · 금융 뉴스")
+    with st.form("naver_news_query"):
+        query = st.text_input("금융 뉴스 검색어", value="금융시장 ETF", max_chars=100)
+        submitted = st.form_submit_button("네이버 뉴스 검색")
+    if not submitted:
+        return
+    if not query.strip():
+        st.warning("검색어를 입력하세요.")
+        return
+    try:
+        items = client.news(query.strip())["items"]
+    except APIError as error:
+        show_error(error)
+        return
+    if not items:
+        st.info("검색 결과가 없습니다.")
+    else:
+        st.caption(f"네이버 검색 결과 {len(items)}건 · 원문 링크 제공")
+    for item in items:
+        st.text(item["title"])
+        st.text(item["summary"])
+        stamp = datetime.fromisoformat(item["published_at"].replace("Z", "+00:00"))
+        st.caption(f"게시 {stamp:%Y-%m-%d %H:%M %Z}")
+        source_link("기사 원문" if item["original_url"] else "네이버 검색 결과 링크", item["url"])
 
 
 @page("ANOVA 검정")

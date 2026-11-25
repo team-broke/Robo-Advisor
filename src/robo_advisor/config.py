@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     api_base_url: AnyHttpUrl = AnyHttpUrl("http://localhost:8000")
 
     dart_api_key: SecretStr | None = Field(default=None, repr=False)
+    naver_client_id: SecretStr | None = Field(default=None, repr=False)
+    naver_client_secret: SecretStr | None = Field(default=None, repr=False)
     llm_api_key: SecretStr | None = Field(default=None, repr=False)
     llm_model: str | None = None
     llm_provider: str | None = None

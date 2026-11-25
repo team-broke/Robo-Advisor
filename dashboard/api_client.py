@@ -130,6 +130,9 @@ class APIClient:
     def health(self):
         return self._json("GET", "/health")[1]
 
+    def news(self, query):
+        return self._json("GET", "/news", params={"query": query, "limit": 5})[1]
+
     def section(self, section):
         if section not in SECTIONS:
             raise ValueError("unknown dashboard section")

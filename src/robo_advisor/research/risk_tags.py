@@ -44,6 +44,8 @@ class EventExclusion(ResearchModel):
 
     index: int = Field(ge=0)
     reason: Literal[
+        "listing_metadata_only",
+        "unscored_body_evidence",
         "invalid_event",
         "failed_research",
         "missing_source_trace",
@@ -119,6 +121,12 @@ def convert_risk_events(
         excluded.append(EventExclusion(index=index, reason=reason))
 
     for index, candidate in enumerate(events):
+        if research.evidence_scope == "dart_listing_metadata":
+            reject(index, "listing_metadata_only")
+            continue
+        if research.evidence_scope == "dart_body":
+            reject(index, "unscored_body_evidence")
+            continue
         try:
             event = RiskEvent.model_validate(candidate)
         except (ValidationError, TypeError):

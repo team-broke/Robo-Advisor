@@ -77,7 +77,7 @@ def _manifest(path, expected):
     return json.loads(payload, parse_constant=invalid)
 
 
-def _payload(root, name, descriptor):
+def _payload(root, name, descriptor, *, max_bytes=None):
     relative = Path(name)
     if relative.is_absolute() or ".." in relative.parts:
         raise ValueError("unsafe artifact path")
@@ -86,7 +86,13 @@ def _payload(root, name, descriptor):
         candidate.is_symlink() for candidate in (path, *path.parents)
     ) or not path.resolve().is_relative_to(root.resolve()):
         raise ValueError("unsafe artifact path")
-    content = path.read_bytes()
+    if max_bytes is None:
+        content = path.read_bytes()
+    else:
+        with path.open("rb") as stream:
+            content = stream.read(max_bytes + 1)
+        if len(content) > max_bytes:
+            raise ValueError("artifact payload exceeds size limit")
     if hashlib.sha256(content).hexdigest() != descriptor["sha256"]:
         raise ValueError("artifact payload SHA256 mismatch")
     return path, content
@@ -304,42 +310,108 @@ def _load_backtests(settings):
     )
 
 
+def _load_dart_body(root, manifest, documents):
+    from robo_advisor.research.dart_corpus import verify_body_corpus
+
+    return verify_body_corpus(root, manifest, documents)[1]
+
+
 def _load_research(settings):
     if settings.research_manifest is None or settings.research_manifest_sha256 is None:
         raise ValueError("research manifest and SHA256 are required")
     import chromadb
     from chromadb.config import Settings as ChromaSettings
+    from robo_advisor.research.contracts import ResearchOptions
+    from robo_advisor.research.documents import SourceKind
     from robo_advisor.research.graph import run_research
-    from robo_advisor.research.ingestion import load_documents
+    from robo_advisor.research.ingestion import ResearchDocument, available_at
     from robo_advisor.research.llm import HttpResearchLLM
     from robo_advisor.research.vector_store import ResearchVectorStore
 
-    model_id = _checkpoint_id(settings)
     manifest = _manifest(settings.research_manifest, settings.research_manifest_sha256)
+    root = settings.research_manifest.expanduser().parent
     descriptor = manifest["documents"]
-    path, _ = _payload(
-        settings.research_manifest.expanduser().parent, descriptor["path"], descriptor
+    _, content = _payload(root, descriptor["path"], descriptor)
+    documents = tuple(
+        ResearchDocument.model_validate_json(line) for line in content.splitlines() if line.strip()
     )
+    evidence_scope = manifest.get("evidence_scope")
     llm_settings = get_settings()
-    llm = HttpResearchLLM(llm_settings)
+    chunks = None
+    if evidence_scope == "dart_listing_metadata":
+        if (
+            not documents
+            or manifest.get("document_count") != len(documents)
+            or any(
+                document.source is not SourceKind.DART
+                or document.published_precision != "date"
+                or document.available_at != available_at(document)
+                or document.related_assets
+                or document.url.host != "dart.fss.or.kr"
+                or document.url.path != "/dsaf001/main.do"
+                or str(document.url.query) != f"rcpNo={document.source_id}"
+                for document in documents
+            )
+        ):
+            raise ValueError("invalid OpenDART listing corpus")
+        llm = HttpResearchLLM(llm_settings, listing_metadata_only=True)
+        # This cache identity concerns the text model, not the PPO artifact.
+        model_id = hashlib.sha256(
+            f"dart-listing-v1:{llm.provider}:{llm.model}".encode()
+        ).hexdigest()
+    elif evidence_scope == "dart_body":
+        chunks = _load_dart_body(root, manifest, documents)
+        llm = HttpResearchLLM(llm_settings, dart_body=True)
+        model_id = hashlib.sha256(f"dart-body-v2:{llm.provider}:{llm.model}".encode()).hexdigest()
+    elif evidence_scope is None:
+        model_id = _checkpoint_id(settings)
+        llm = HttpResearchLLM(llm_settings)
+    else:
+        raise ValueError("unsupported research evidence scope")
+    use_gemini = llm_settings.llm_provider == "gemini"
+    if chunks is not None:
+        options = ResearchOptions(
+            max_retries=0, n_results=6, min_evidence=1, min_relevance=0.75, max_distance=1.15
+        )
+    else:
+        options = ResearchOptions(max_retries=0) if use_gemini else None
     store = ResearchVectorStore(
         client=chromadb.EphemeralClient(settings=ChromaSettings(anonymized_telemetry=False)),
         collection_name=f"api-{uuid4().hex}",
     )
-    store.index(load_documents(path))
+    if chunks is not None:
+        store.index_body(chunks)
+    else:
+        store.index(documents)
     cache = ResearchCache(
         settings.research_cache_dir,
         max_entries=settings.research_cache_entries,
         secrets=(llm_settings.llm_api_key.get_secret_value(),),
     )
     return ResearchJobs(
-        lambda question, as_of: run_research(question, as_of, store=store, llm=llm),
+        lambda question, as_of: run_research(
+            question, as_of, store=store, llm=llm, options=options, evidence_scope=evidence_scope
+        ),
         cache,
         model_id=model_id,
         artifact_version=settings.research_manifest_sha256,
-        max_workers=settings.research_workers,
+        max_workers=1 if use_gemini else settings.research_workers,
         max_jobs=settings.research_max_jobs,
     )
+
+
+def _load_news(_settings):
+    from robo_advisor.research.sources.naver_news import NaverNewsSearch
+
+    settings = get_settings()
+    if settings.naver_client_id is None or settings.naver_client_secret is None:
+        return None
+    if not (
+        settings.naver_client_id.get_secret_value().strip()
+        and settings.naver_client_secret.get_secret_value().strip()
+    ):
+        return None
+    return NaverNewsSearch(settings.naver_client_id, settings.naver_client_secret)
 
 
 @dataclass(frozen=True)
@@ -362,6 +434,7 @@ def preload_services(settings=None, *, loaders=None):
         "research": _load_research,
         "backtests": _load_backtests,
         "dashboard": _load_dashboard,
+        "news": _load_news,
     }
     if loaders:
         if not set(loaders).issubset(defaults):
@@ -371,7 +444,7 @@ def preload_services(settings=None, *, loaders=None):
     for name, loader in defaults.items():
         try:
             services[name] = loader(settings)
-            if services[name] is None:
+            if services[name] is None and name != "news":
                 reasons[name] = "not_configured"
         except Exception as error:
             services[name] = None
