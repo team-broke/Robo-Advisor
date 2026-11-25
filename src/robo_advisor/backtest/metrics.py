@@ -20,13 +20,15 @@ def _returns(series: pd.Series, name: str) -> np.ndarray:
 
 def calculate_metrics(
     returns: pd.Series,
-    benchmark: pd.Series,
+    benchmark: pd.Series | None = None,
     *,
     risk_free_rate: float = 0.0,
     periods_per_year: int = 252,
     var_method: str = "historical",
 ) -> dict[str, float]:
     """12개 지표를 계산한다. benchmark는 입력과 동일한 날짜/단위여야 한다.
+
+    benchmark가 없으면 Alpha, Beta, Information Ratio는 NaN이다.
 
     rf는 연 유효 수익률이며 일 rf는 기하 변환한다. 변동성은 표본 표준편차,
     Sortino는 전체 표본의 음수 초과수익률 제곱평균을 사용한다. Alpha는 CAPM
@@ -36,8 +38,8 @@ def calculate_metrics(
     확률질량을 사용하여 경계 표본에 분수 가중치를 준다. 정의 불가능한 비율은 NaN.
     """
     values = _returns(returns, "returns")
-    reference = _returns(benchmark, "benchmark")
-    if not returns.index.equals(benchmark.index):
+    reference = None if benchmark is None else _returns(benchmark, "benchmark")
+    if benchmark is not None and not returns.index.equals(benchmark.index):
         raise ValueError("returns and benchmark indices must match exactly")
     if (
         isinstance(periods_per_year, bool)
@@ -56,7 +58,6 @@ def calculate_metrics(
     scale = np.sqrt(periods_per_year)
     daily_rf = np.expm1(np.log1p(risk_free_rate) / periods_per_year)
     excess = values - daily_rf
-    benchmark_excess = reference - daily_rf
     std = values.std(ddof=1)
     wealth = np.concatenate(([1.0], np.cumprod(1.0 + values)))
     mdd = float(np.max(1.0 - wealth / np.maximum.accumulate(wealth)))
@@ -74,11 +75,16 @@ def calculate_metrics(
         z = norm.ppf(0.05)
         var = float(-values.mean() - std * z)
         cvar = float(-values.mean() + std * norm.pdf(z) / 0.05)
-    beta = ratio(
-        float(np.cov(excess, benchmark_excess, ddof=1)[0, 1]),
-        float(benchmark_excess.var(ddof=1)),
-    )
-    active = values - reference
+    alpha = beta = information_ratio = float("nan")
+    if reference is not None:
+        benchmark_excess = reference - daily_rf
+        beta = ratio(
+            float(np.cov(excess, benchmark_excess, ddof=1)[0, 1]),
+            float(benchmark_excess.var(ddof=1)),
+        )
+        alpha = float((excess.mean() - beta * benchmark_excess.mean()) * periods_per_year)
+        active = values - reference
+        information_ratio = ratio(float(active.mean() * scale), float(active.std(ddof=1)))
     return {
         "cumulative_return": float(wealth[-1] - 1.0),
         "cagr": cagr,
@@ -91,7 +97,7 @@ def calculate_metrics(
             float(excess.mean() * scale), float(np.sqrt(np.mean(np.minimum(excess, 0) ** 2)))
         ),
         "calmar": ratio(cagr, mdd),
-        "alpha": float((excess.mean() - beta * benchmark_excess.mean()) * periods_per_year),
+        "alpha": alpha,
         "beta": beta,
-        "information_ratio": ratio(float(active.mean() * scale), float(active.std(ddof=1))),
+        "information_ratio": information_ratio,
     }

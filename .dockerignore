@@ -1,0 +1,16 @@
+.git
+.github
+.venv
+venv
+**/__pycache__
+**/*.py[cod]
+*.egg-info
+.pytest_cache
+.coverage
+.env
+.env.*
+data
+artifacts
+models
+tests
+scripts
