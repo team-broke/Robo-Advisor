@@ -62,6 +62,12 @@ def page(title):
 
 def section(client, name):
     response = client.section(name)
+    provenance = response.get("provenance")
+    if provenance and provenance["kind"] == "synthetic":
+        st.warning("합성 데이터 기반 시스템 검증 결과입니다. 실제 투자 성과가 검증되지 않았습니다.")
+        st.caption(f"실행 {provenance['run_id']} · 후보 평가 정책 · 학습 승인 보류")
+    elif provenance and provenance["status"] == "unverified":
+        st.warning("이 연구 결과는 검증 및 학습 승인 대기 상태입니다.")
     st.caption(f"평가 시각 {response['as_of']} · 산출물 {response['artifact_version'][:12]}")
     if response.get("model_id"):
         st.caption(f"모델 {response['model_id']}")

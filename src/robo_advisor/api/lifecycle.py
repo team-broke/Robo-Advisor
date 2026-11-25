@@ -180,7 +180,21 @@ def _load_optimizer(settings):
     if hashlib.sha256(checkpoint).hexdigest() != model_id:
         raise ValueError("checkpoint changed during preload")
     wrapper = PPOPolicyWrapper(PPO.load(io.BytesIO(checkpoint), device="cpu"), layout)
-    return PolicyOptimizer(wrapper, observations, model_id, tags)
+    optimizer = PolicyOptimizer(wrapper, observations, model_id, tags)
+    optimizer.provenance = _provenance(manifest, model_id)
+    return optimizer
+
+
+def _provenance(manifest, model_id):
+    from robo_advisor.api.schemas import ArtifactProvenance
+
+    raw = manifest.get("provenance")
+    if raw is None:
+        return None
+    provenance = ArtifactProvenance.model_validate(raw)
+    if provenance.model_id != model_id:
+        raise ValueError("artifact provenance model_id mismatch")
+    return provenance
 
 
 def _load_explainer(settings):
@@ -197,7 +211,9 @@ def _load_explainer(settings):
     )
     if result.metadata["model_id"] != model_id:
         raise ValueError("SHAP model_id mismatch")
-    return ShapExplainer(result, model_id)
+    explainer = ShapExplainer(result, model_id)
+    explainer.provenance = _provenance(manifest, model_id)
+    return explainer
 
 
 class BacktestLoader(Protocol):

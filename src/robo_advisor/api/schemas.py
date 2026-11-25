@@ -42,7 +42,27 @@ class OptimizeRequest(BaseModel):
     as_of: UTCDateTime = Field(description="이 시각까지 사용 가능했던 관측만 쓴다. 시간대 필수.")
 
 
-class OptimizeResponse(BaseModel):
+class ArtifactProvenance(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["synthetic", "checkpoint_inference"]
+    status: Literal["unverified"]
+    training_approved: Literal[False]
+    policy_status: Literal["candidate"]
+    performance_decision: str
+    model_id: str
+    run_id: str
+    evaluation: dict[str, JsonValue]
+    input_sha256: dict[str, str]
+    output_sha256: dict[str, str]
+
+
+class ArtifactResponse(BaseModel):
+    provenance: ArtifactProvenance | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+
+
+class OptimizeResponse(ArtifactResponse):
     model_config = _examples(
         {
             "model_id": "alfred-v2-best",
@@ -79,7 +99,7 @@ class FeatureContribution(BaseModel):
     value: float | None = None
 
 
-class ExplainResponse(BaseModel):
+class ExplainResponse(ArtifactResponse):
     model_config = _examples(
         {
             "model_id": "alfred-v2-best",
@@ -123,7 +143,7 @@ class ResearchJob(BaseModel):
     status: Literal["queued"]
 
 
-class BacktestResponse(BaseModel):
+class BacktestResponse(ArtifactResponse):
     model_config = _examples(
         {
             "strategy": "mvo",
@@ -185,7 +205,7 @@ class DashboardPlot(BaseModel):
     role: str
 
 
-class DashboardResponse(BaseModel):
+class DashboardResponse(ArtifactResponse):
     """사전 계산 산출물의 시점·버전과 화면 표시용 값."""
 
     model_config = _examples(

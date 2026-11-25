@@ -52,6 +52,8 @@ def _require(service: Any, name: str) -> Any:
 
 
 def _finite_or_none(value: Any) -> float | None:
+    if value is None:
+        return None
     number = float(value)
     return number if math.isfinite(number) else None
 
@@ -79,7 +81,12 @@ def create_app(services: Services | None = None, *, preload_settings=None, loade
     def optimize(body: OptimizeRequest, services: ServicesDep) -> OptimizeResponse:
         optimizer = _require(services.optimizer, "optimizer")
         weights = optimizer.optimize(body.as_of)
-        response = OptimizeResponse(model_id=optimizer.model_id, as_of=body.as_of, weights=weights)
+        response = OptimizeResponse(
+            model_id=optimizer.model_id,
+            as_of=body.as_of,
+            weights=weights,
+            provenance=getattr(optimizer, "provenance", None),
+        )
         log_policy_decision(optimizer, body.as_of)
         return response
 
@@ -92,6 +99,7 @@ def create_app(services: Services | None = None, *, preload_settings=None, loade
         top = contributions.abs().sort_values(ascending=False, kind="stable").index[: body.top_k]
         return ExplainResponse(
             model_id=explainer.model_id,
+            provenance=getattr(explainer, "provenance", None),
             output=result["output"],
             timestamp=result["timestamp"],
             base_value=result["base_value"],

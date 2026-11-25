@@ -139,9 +139,12 @@ class DashboardArtifacts:
                 as_of=raw["as_of"],
                 model_id=raw.get("model_id"),
                 artifact_version=expected_manifest_sha256,
+                provenance=raw.get("provenance"),
                 data=data.model_dump(mode="json"),
                 plots=plots,
             )
+            if response.provenance and response.provenance.model_id != response.model_id:
+                raise ValueError("dashboard provenance model_id mismatch")
             result._validate_times(data, response.as_of)
             result._sections[section] = response
         return result
