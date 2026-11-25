@@ -8,6 +8,7 @@ import io
 import json
 import re
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 
 import pandas as pd
@@ -46,7 +47,14 @@ def run_from_spec(spec_path, *, root, output_dir):
     """명세는 사용자가 사전 고정한다. 출처 미확인 파일을 학습 승인하지 않는다."""
     if Path(output_dir).exists():
         raise FileExistsError("diagnostic output directory already exists")
-    spec_bytes = Path(spec_path).read_bytes()
+    with prepare_diagnostic_inputs(spec_path, root=root) as arguments:
+        return save_diagnostics(diagnose_ppo(**arguments), output_dir)
+
+
+@contextmanager
+def prepare_diagnostic_inputs(spec_path, *, root):
+    """검증한 진단 입력을 재사용하고 임시 Monitor 파일의 수명을 관리한다."""
+    spec_bytes = spec_path if isinstance(spec_path, bytes) else Path(spec_path).read_bytes()
     spec = json.loads(spec_bytes)
     allowed = {
         "schema_version",
@@ -173,12 +181,12 @@ def run_from_spec(spec_path, *, root, output_dir):
                 raise ValueError("Monitor filenames must be unique *.monitor.csv")
             seen.add(name)
             (monitor / name).write_bytes(read_pinned(root, item))
-        result = diagnose_ppo(
-            model,
-            dataset,
-            manifest,
-            config,
-            periods,
+        yield dict(
+            model=model,
+            dataset=dataset,
+            training_manifest=manifest,
+            config=config,
+            periods=periods,
             provenance=provenance,
             policy_version=spec["policy_version"],
             currency=spec["currency"],
@@ -188,7 +196,6 @@ def run_from_spec(spec_path, *, root, output_dir):
             regime_rules=spec.get("regime_rules"),
             training_run_dir=temporary if seen else None,
         )
-    return save_diagnostics(result, output_dir)
 
 
 def main():
