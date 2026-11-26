@@ -470,15 +470,16 @@ def test_fred_date_column_variants(date_column):
     assert date_column in result.raw_data.columns
 
 
-@pytest.mark.parametrize("value", [".", "unexpected", "inf"])
+@pytest.mark.parametrize("value", [".", "", "unexpected", "inf"])
 def test_fred_missing_or_invalid_observation_is_not_dropped(value):
     result = _fred(f"DATE,DGS3MO\n2019-09-02,2.0\n2019-09-03,{value}\n2019-09-04,2.1\n")
     assert result.status == "failed"
     assert len(result.raw_data) == 3
     assert len(result.data) == 3
     assert result.metadata["issues"]
-    if value == ".":
-        assert result.raw_data.loc[1, "DGS3MO"] == "."
+    assert result.raw_data.loc[1, "DGS3MO"] == value
+    assert result.data["Value"].dtype == float
+    if value in {".", "", "unexpected"}:
         assert pd.isna(result.data.loc[pd.Timestamp("2019-09-03"), "Value"])
 
 
