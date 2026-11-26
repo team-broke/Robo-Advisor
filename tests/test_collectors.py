@@ -355,6 +355,28 @@ def test_provider_exception_is_recorded_without_synthetic_data():
     assert result.error["exception_type"] == "RuntimeError"
 
 
+@pytest.mark.parametrize(
+    "collector,spec,request_arg",
+    [
+        pytest.param(collect_yahoo, _spec(), "download", id="yahoo"),
+        pytest.param(collect_fred, _fred_spec(), "http_get", id="fred"),
+    ],
+)
+def test_provider_timeout_is_recorded_without_synthetic_data(collector, spec, request_arg):
+    def timed_out(*args, **kwargs):
+        raise TimeoutError("fixture provider timeout")
+
+    result = collector(spec, end="2019-09-05", **{request_arg: timed_out})
+
+    assert result.status == "failed"
+    assert result.error["code"] == "COLLECTION_FAILED"
+    assert result.error["exception_type"] == "TimeoutError"
+    assert result.metadata["row_count"] == 0
+    assert result.data.empty
+    assert result.raw_data is None
+    assert result.raw_text is None
+
+
 def test_market_timezone_preserves_korean_native_session_dates(prices):
     source = prices.copy(deep=True)
     source.index = source.index.tz_localize("Asia/Seoul").tz_convert("UTC")
