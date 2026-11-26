@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from robo_advisor.schemas.common import NonEmptyString, PortfolioWeights, UTCDateTime
+from robo_advisor.research.contracts import ResearchResult
 
 AS_OF_EXAMPLE = "2024-03-04T06:30:00Z"
 STRATEGIES = ("ppo", "mvo", "equal_weight", "benchmark")
@@ -32,6 +33,7 @@ class HealthResponse(BaseModel):
 
     status: Literal["ok"]
     services: dict[str, bool]
+    reasons: dict[str, str] = Field(default_factory=dict)
 
 
 class OptimizeRequest(BaseModel):
@@ -137,3 +139,68 @@ class BacktestResponse(BaseModel):
     start: UTCDateTime
     end: UTCDateTime
     metrics: dict[str, float | None] = Field(description="정의 불가능한 지표(NaN)는 null")
+
+
+class ResearchJobStatus(BaseModel):
+    """보존 중인 비동기 리서치 job의 상태와 완료 결과."""
+
+    model_config = _examples(
+        {"job_id": "3f2c9a", "status": "running", "result": None, "failure_reason": None},
+        {
+            "job_id": "3f2c9a",
+            "status": "failed",
+            "result": None,
+            "failure_reason": "insufficient_evidence",
+        },
+    )
+
+    job_id: str
+    status: Literal["queued", "running", "completed", "failed"]
+    result: ResearchResult | None = None
+    failure_reason: str | None = None
+    correlation_id: str | None = Field(default=None, description="최초 제출 요청의 correlation ID")
+
+
+class ErrorResponse(BaseModel):
+    model_config = _examples(
+        {
+            "code": "service_unavailable",
+            "message": "Service is unavailable",
+            "correlation_id": "request-123",
+        }
+    )
+
+    code: str
+    message: str
+    correlation_id: str
+
+
+DashboardSection = Literal["portfolio", "rl_performance", "shap", "anova", "risk_monitor"]
+
+
+class DashboardPlot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
+    title: str
+    role: str
+
+
+class DashboardResponse(BaseModel):
+    """사전 계산 산출물의 시점·버전과 화면 표시용 값."""
+
+    model_config = _examples(
+        {
+            "section": "portfolio",
+            "as_of": AS_OF_EXAMPLE,
+            "model_id": None,
+            "artifact_version": "a" * 64,
+            "data": {"weights": None, "cumulative_returns": []},
+            "plots": [],
+        }
+    )
+    section: DashboardSection
+    as_of: UTCDateTime
+    model_id: str | None = None
+    artifact_version: str = Field(pattern=r"^[a-f0-9]{64}$")
+    data: dict[str, JsonValue]
+    plots: list[DashboardPlot] = Field(default_factory=list)

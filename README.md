@@ -27,11 +27,16 @@
 
 ```bash
 cp .env.example .env   # API 키 입력
-docker compose up
+docker compose up --build
 ```
 
 - API: http://localhost:8000 (Swagger UI: `/docs`)
 - 대시보드: http://localhost:8501
+
+`artifacts/`, `models/`, `data/`는 API 컨테이너의 `/app` 아래에 읽기 전용으로 마운트된다.
+사전 계산 산출물의 경로(컨테이너 기준)와 신뢰 해시는 `.env`의 `API_*` 변수로 지정하고,
+지정하지 않은 서비스는 `/health`에서 사유와 함께 미로드로 표시된다. 대시보드 컨테이너는
+`robo_advisor` 패키지 없이 `API_BASE_URL`(`http://api:8000`)로만 API에 접근한다.
 
 WSL Ubuntu의 NVIDIA GPU 학습 PC에서는 Python 3.10 venv를 활성화한 뒤
 `bash scripts/install_cuda_torch.sh`를 실행한다. 먼저 `requirements.txt`를 설치하고,
