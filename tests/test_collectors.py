@@ -1,6 +1,7 @@
 """수집 계약, 원천 보존 및 검증 근거를 외부 API 없이 확인한다."""
 
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 import socket
 
@@ -266,18 +267,67 @@ def test_missing_ohlcv_columns_fail_with_evidence(prices, column):
     pd.testing.assert_frame_equal(result.raw_data, source)
 
 
-@pytest.mark.parametrize("kind", ["low_above_high", "open_above_high"])
-def test_ohlc_relationship_anomalies_are_reported_without_repair(prices, kind):
+@pytest.mark.parametrize(
+    "defects, expected_rows",
+    [
+        ([(1, "Low", 104.0)], [(1, "2019-09-03", 101.0, 103.0, 104.0, 102.0)]),
+        ([(1, "Open", 104.0)], [(1, "2019-09-03", 104.0, 103.0, 100.0, 102.0)]),
+        (
+            [(0, "Low", 103.0), (2, "Open", 105.0)],
+            [
+                (0, "2019-09-02", 100.0, 102.0, 103.0, 101.0),
+                (2, "2019-09-04", 105.0, 104.0, 101.0, 103.0),
+            ],
+        ),
+    ],
+)
+def test_ohlc_relationship_anomalies_are_reported_without_repair(prices, defects, expected_rows):
     source = prices.copy(deep=True)
-    if kind == "low_above_high":
-        source.loc[source.index[1], "Low"] = 104.0
-    else:
-        source.loc[source.index[1], "Open"] = 104.0
+    for position, column, value in defects:
+        source.loc[source.index[position], column] = value
+    original = source.copy(deep=True)
+
     result = _yahoo(source)
+
+    expected = [
+        {
+            "code": "INVALID_OHLC_RANGE",
+            "message": "OHLC values contradict the low/high bounds",
+            "severity": "error",
+            "position": position,
+            "date": date,
+            "open": opening,
+            "high": high,
+            "low": low,
+            "close": close,
+        }
+        for position, date, opening, high, low, close in expected_rows
+    ]
     assert result.status == "failed"
-    assert result.metadata["issues"]
-    pd.testing.assert_frame_equal(result.raw_data, source)
-    pd.testing.assert_frame_equal(result.data, source)
+    report = result.validation["ohlc"]
+    assert report["status"] == "failed"
+    assert report["issues"] == expected
+    assert [issue for issue in result.metadata["issues"] if issue.get("check") == "ohlc"] == [
+        {**issue, "check": "ohlc"} for issue in expected
+    ]
+    assert json.loads(json.dumps(report, allow_nan=False)) == report
+    pd.testing.assert_frame_equal(source, original)
+    pd.testing.assert_frame_equal(result.raw_data, original)
+    pd.testing.assert_frame_equal(result.data, original)
+
+
+def test_ohlc_error_preserves_source_label_when_dates_are_invalid(prices):
+    source = prices.copy(deep=True)
+    source.index = pd.Index(["2019-09-02", "bad-date", "2019-09-04"], name="Date")
+    source.loc["bad-date", "Low"] = 104.0
+
+    result = _yahoo(source)
+
+    assert result.status == "failed"
+    assert "INVALID_DATE" in _codes(result)
+    report = result.validation["ohlc"]
+    assert report["issues"][0]["source_date"] == "bad-date"
+    assert json.loads(json.dumps(report, allow_nan=False)) == report
 
 
 @pytest.mark.parametrize("outside", ["2019-08-30", "2019-09-05"])
