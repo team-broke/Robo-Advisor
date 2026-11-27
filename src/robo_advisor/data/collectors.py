@@ -420,11 +420,22 @@ def _ohlc_report(data):
             continue  # Type/NaN/Inf evidence is already retained by #10 price validation.
         opening, high, low, close = row
         if low > high or low > min(opening, close) or high < max(opening, close):
+            label = data.index[position]
+            if isinstance(label, pd.Timestamp) and label.tzinfo is None:
+                details = {"date": label.date().isoformat()}
+            else:
+                details = {"source_date": str(label)}
+            for column, value in zip(OHLC, row):
+                if isinstance(value, np.generic):
+                    value = value.item()
+                # Extended-precision floats may not have a lossless Python scalar equivalent.
+                details[column.lower()] = str(value) if isinstance(value, np.generic) else value
             issues.append(
                 _issue(
                     "INVALID_OHLC_RANGE",
                     "OHLC values contradict the low/high bounds",
                     position=position,
+                    **details,
                 )
             )
     return _report(issues)
