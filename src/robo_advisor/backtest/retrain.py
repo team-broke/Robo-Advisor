@@ -253,13 +253,14 @@ def equal_weight_policy(n_assets: int):
 def _metrics(result: EvaluationResult, benchmark: pd.Series | None) -> dict:
     if len(result.returns) < 2:
         return {}
-    reference = (
-        pd.Series(0.0, index=result.returns.index)
-        if benchmark is None
-        else benchmark.reindex(result.returns.index)
-    )
-    if reference.isna().any():
-        reference = pd.Series(0.0, index=result.returns.index)
+    reference = benchmark
+    if (
+        result.terminated
+        or reference is None
+        or not reference.index.equals(result.returns.index)
+        or not np.isfinite(reference.to_numpy(dtype=float)).all()
+    ):
+        reference = None
     return {
         key: float(value) if np.isfinite(value) else None
         for key, value in calculate_metrics(result.returns, reference).items()
@@ -407,12 +408,13 @@ def run_job(
         "test_end": job.test_end.isoformat(),
         "training_config": training.model_dump(mode="json"),
         "training_manifest": str(result.manifest_path),
-        "initial_weights": "random",
+        "initial_weights": "cash",
         "evaluated_model": chosen,
         "evaluated_model_path": str(model_path),
         "actual_timesteps": manifest.get("actual_timesteps"),
         "validation_best": (manifest.get("validation") or {}).get("best"),
-        "ppo": _summary(ppo_result, baseline.returns),
+        "relative_metrics_reference": "legacy_per_step_equal_weight",
+        "ppo": _summary(ppo_result, None if baseline.terminated else baseline.returns),
         "equal_weight": _summary(baseline, None),
         "finished_at": _utc_now(),
     }

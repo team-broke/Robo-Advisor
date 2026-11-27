@@ -2,6 +2,7 @@
 
 import json
 import os
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -131,10 +132,10 @@ def test_runs_fresh_models_and_resumes(setup, monkeypatch):
     # 각 작업은 자기 run_id의 최종 모델만 평가용으로 읽는다.
     assert len(loaded) == 3
     for run_id, model_path in zip(run_ids, loaded):
-        assert f"/{run_id}/" in model_path
+        assert Path(model_path).parent.name == run_id
     for run_id in run_ids:
         result = json.loads((manifest_path.parent / "jobs" / run_id / "result.json").read_text())
-        assert result["initial_weights"] == "random"
+        assert result["initial_weights"] == "cash"
         assert result["evaluated_model"] == "final"
         frame = pd.read_csv(
             manifest_path.parent / "jobs" / run_id / "test_returns.csv",
