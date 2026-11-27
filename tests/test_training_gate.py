@@ -1,7 +1,10 @@
 """The PPO entrypoint rejects unreviewed inputs before creating an environment."""
 
+from contextlib import redirect_stdout
 import json
 from pathlib import Path
+import subprocess
+import sys
 
 import numpy as np
 import pandas as pd
@@ -13,7 +16,7 @@ from robo_advisor.config import Settings
 from robo_advisor.data.snapshot import read_snapshot, write_snapshot
 from robo_advisor.features.dataset_io import write_feature_dataset
 from robo_advisor.features.ppo_input import convert_ppo_inputs
-from robo_advisor.ops import ppo_preflight
+from robo_advisor.ops import ppo_preflight, queue as queue_module
 from robo_advisor.rl import train, training, training_gate
 from tests import test_feature_dataset as feature_tests
 from tests import test_ppo_reproducibility as handoff_tests
@@ -383,6 +386,55 @@ def test_reviewed_research_trains_saves_and_reloads(tmp_path, monkeypatch):
     assert manifest["input_gate"]["file_sha256"] == checked.dataset.file_sha256
     assert result.final_model_path.is_file()
     assert PPO.load(result.final_model_path).num_timesteps >= 128
+
+
+def test_queue_passes_reviewed_research_to_cli_and_training(tmp_path, monkeypatch):
+    """Queue configuration reaches the same research gate and a real short PPO learn call."""
+    config, spec_path, checked = _native_research_inputs(tmp_path, monkeypatch)
+    base = tmp_path / "queue-base.yaml"
+    base.write_text(yaml.safe_dump(config.model_dump(mode="json")))
+    queue_path = tmp_path / "queue.yaml"
+    queue_path.write_text(
+        yaml.safe_dump(
+            {
+                "queue_id": "reviewed",
+                "jobs": [
+                    {
+                        "run_id": "queue-research",
+                        "config": base.name,
+                        "preflight_spec": str(spec_path.relative_to(tmp_path)),
+                    }
+                ],
+            }
+        )
+    )
+    original_learn = PPO.learn
+
+    def short_learn(model, total_timesteps, **kwargs):
+        assert total_timesteps == 100000
+        return original_learn(model, total_timesteps=128, **kwargs)
+
+    monkeypatch.setattr(PPO, "learn", short_learn)
+
+    def run_in_process(command, **kwargs):
+        assert command[:3] == [sys.executable, "-m", "robo_advisor.rl.train"]
+        assert command[command.index("--preflight-spec") + 1] == str(spec_path)
+        with redirect_stdout(kwargs["stdout"]):
+            train.main(command[3:])
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.delenv("PYTEST_CURRENT_TEST")
+    state = queue_module.run_queue(
+        queue_path, artifacts_dir=tmp_path / "artifacts", runner=run_in_process
+    )
+    assert state["state"] == "completed"
+    manifest_path = tmp_path / "artifacts/training/queue-research/manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["status"] == "completed"
+    assert manifest["training_approved"] is False
+    assert manifest["research_use"] is True
+    assert manifest["input_gate"]["file_sha256"] == checked.dataset.file_sha256
+    assert (tmp_path / "models/queue-research/final_model.zip").is_file()
 
 
 def test_failed_real_source_audit_blocks_before_environment(tmp_path, monkeypatch):
