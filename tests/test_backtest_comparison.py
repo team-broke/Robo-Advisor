@@ -20,6 +20,7 @@ from robo_advisor.backtest.retrain import _metrics, equal_weight_policy
 from robo_advisor.config import Settings
 from robo_advisor.diagnostics.ppo_diagnostics import DiagnosticPeriod
 from robo_advisor.rl import training
+from robo_advisor.rl.training_gate import register_synthetic_test_fixture
 from robo_advisor.rl.evaluation import evaluate_policy
 from robo_advisor.rl.training import EnvironmentConfig, TrainingDataset
 
@@ -309,6 +310,7 @@ def test_synthetic_cpu_smoke_train_reload_and_export(case, tmp_path, monkeypatch
         path = tmp_path / (name + ".parquet")
         getattr(data, name).to_parquet(path)
         files[path.name] = pin(path)
+    register_synthetic_test_fixture(tmp_path)
     settings = Settings(
         _env_file=None, models_dir=tmp_path / "models", artifacts_dir=tmp_path / "artifacts"
     )

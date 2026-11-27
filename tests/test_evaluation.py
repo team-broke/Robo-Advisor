@@ -15,6 +15,7 @@ from robo_advisor.rl.training import (
 )
 from robo_advisor.config import Settings
 from robo_advisor.rl import training
+from robo_advisor.rl.training_gate import register_synthetic_test_fixture
 
 
 class EqualPolicy:
@@ -94,6 +95,7 @@ def test_smoke_trained_policy_rollout(tmp_path, monkeypatch):
     directory.mkdir()
     for name in ("returns", "rsi", "macd"):
         getattr(data, name).to_parquet(directory / f"{name}.parquet")
+    register_synthetic_test_fixture(directory)
     settings = Settings(
         _env_file=None,
         models_dir=tmp_path / "models",

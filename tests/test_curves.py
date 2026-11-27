@@ -9,6 +9,7 @@ import pytest
 
 from robo_advisor.config import Settings
 from robo_advisor.rl import curves, training
+from robo_advisor.rl.training_gate import register_synthetic_test_fixture
 
 
 def write_monitor(path, rows):
@@ -114,6 +115,7 @@ def test_training_run_records_monitor_curves_and_safeguard(tmp_path, monkeypatch
     directory.mkdir()
     for name, frame in (("returns", returns), ("rsi", returns * 0 + 50), ("macd", returns * 0)):
         frame.to_parquet(directory / f"{name}.parquet")
+    register_synthetic_test_fixture(directory)
     settings = Settings(
         _env_file=None, models_dir=tmp_path / "models", artifacts_dir=tmp_path / "artifacts"
     )
@@ -164,6 +166,7 @@ def test_curve_failure_keeps_completed_training(tmp_path, monkeypatch):
     directory.mkdir()
     for name, frame in (("returns", returns), ("rsi", returns * 0 + 50), ("macd", returns * 0)):
         frame.to_parquet(directory / f"{name}.parquet")
+    register_synthetic_test_fixture(directory)
     settings = Settings(
         _env_file=None, models_dir=tmp_path / "models", artifacts_dir=tmp_path / "artifacts"
     )

@@ -331,6 +331,7 @@ def run_training(
     run_id: str | None = None,
     smoke: bool = False,
     log_interval: float = 30.0,
+    preflight_spec: str | Path | None = None,
 ) -> TrainingResult:
     """학습·체크포인트 저장 후 manifest를 완성하며 기존 실행을 덮어쓰지 않는다.
 
@@ -342,6 +343,7 @@ def run_training(
     warn_only 결정론 설정은 장치·라이브러리 버전 간 완전 동일성을 보장하지 않는다.
     """
     config = TrainingConfig.model_validate(config.model_dump(), context={"smoke": smoke})
+    requested_config = config
     requested_device = config.device
     device = resolve_device(requested_device)
     resolved = config.model_dump(mode="json")
@@ -358,7 +360,30 @@ def run_training(
     artifact_dir = settings.artifacts_dir.expanduser().resolve() / "training" / run_id
     if model_dir.exists() or artifact_dir.exists():
         raise FileExistsError(f"run_id already exists: {run_id}")
+    from robo_advisor.rl.training_gate import (
+        authorize_research,
+        authorize_synthetic_fixture,
+        validate_research_environments,
+    )
+
+    if preflight_spec is not None:
+        spec_head = json.loads(Path(preflight_spec).read_text(encoding="utf-8"))
+        if not isinstance(spec_head, dict):
+            raise ValueError("preflight specification must be a JSON object")
+        kind = spec_head.get("kind")
+        if kind == "synthetic":
+            gate, checked = authorize_synthetic_fixture(
+                requested_config, smoke=smoke, preflight_spec=preflight_spec
+            )
+        else:
+            gate, checked = authorize_research(requested_config, preflight_spec)
+    else:
+        gate, checked = authorize_synthetic_fixture(requested_config, smoke=smoke)
     dataset = load_training_dataset(config.data)
+    if dataset.file_sha256 != gate["file_sha256"]:
+        raise ValueError("PPO input files changed after authorization")
+    if checked is not None:
+        gate["coverage"] = validate_research_environments(checked)
     validation_data = None
     if config.validation is not None:
         from robo_advisor.rl.validation import split_validation
@@ -402,6 +427,9 @@ def run_training(
             "assets": list(dataset.returns.columns),
         },
         "data_file_sha256": dataset.file_sha256,
+        "training_approved": False,
+        "research_use": gate["kind"] == "research",
+        "input_gate": gate,
         "package_versions": {
             "python": sys.version.split()[0],
             **{

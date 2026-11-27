@@ -324,7 +324,7 @@ def _check_config_location(root, config, descriptors):
         raise ValueError("unlisted risk_tags.parquet would be loaded by training")
 
 
-def check_inputs(spec, root, *, relocated=False):
+def check_inputs(spec, root, *, relocated=False, check_environments=True):
     """Return explicit evidence and technical status; never construct a learner."""
     root = Path(root).resolve()
     kind = spec.get("kind")
@@ -399,7 +399,10 @@ def check_inputs(spec, root, *, relocated=False):
         result["evaluation_policy"] = _check_policy(
             object_json(evidence["evaluation_policy"]), evidence["calendar"], kind
         )
-        result["coverage"] = _check_environments(checked.dataset, config, bounds)
+        if check_environments:
+            result["coverage"] = _check_environments(checked.dataset, config, bounds)
+        else:
+            result["coverage"] = "deferred_until_training_allowed"
         result["assets"] = list(checked.dataset.returns.columns)
         result["data_file_sha256"] = checked.dataset.file_sha256
     except (KeyError, FileNotFoundError) as exc:
