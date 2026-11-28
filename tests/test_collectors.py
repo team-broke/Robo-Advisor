@@ -718,6 +718,32 @@ def test_config_rejects_unconfirmed_decisions_and_ambiguous_dataset_ids(tmp_path
 
 
 @pytest.mark.parametrize(
+    "section,value",
+    [
+        ("collection", None),
+        ("universe", []),
+        ("risk_free_policy", "confirmed"),
+        ("selected_etfs", [["etf"]] * 12),
+        ("selected_dataset", ["rf"]),
+    ],
+)
+def test_asset_config_rejects_malformed_nested_types(tmp_path, section, value):
+    yaml = pytest.importorskip("yaml")
+    source = Path(__file__).resolve().parents[1] / "config" / "assets.yaml"
+    document = yaml.safe_load(source.read_text(encoding="utf-8"))
+    if section == "selected_etfs":
+        document["universe"].update(status="confirmed", selected_etfs=value)
+    elif section == "selected_dataset":
+        document["risk_free_policy"].update(status="confirmed", selected_dataset=value)
+    else:
+        document[section] = value
+    path = tmp_path / "assets.yaml"
+    path.write_text(yaml.safe_dump(document), encoding="utf-8")
+    with pytest.raises(ValueError, match="collection|universe|risk_free_policy|selected"):
+        load_asset_config(path)
+
+
+@pytest.mark.parametrize(
     "collector,spec,argument",
     [
         (collect_yahoo, _fred_spec(), "download"),

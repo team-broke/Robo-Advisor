@@ -36,6 +36,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from robo_advisor.backtest.metrics import calculate_metrics
 from robo_advisor.backtest.walk_forward import WalkForwardWindow, walk_forward_split
 from robo_advisor.config import get_settings
+from robo_advisor.process import process_alive
 from robo_advisor.rl.evaluation import EvaluationResult, evaluate_policy
 from robo_advisor.rl.progress import LOGGER, format_duration
 from robo_advisor.rl.rewards import RewardVariant
@@ -309,7 +310,7 @@ class RunLock:
                     owner = int(self.path.read_text(encoding="utf-8").strip() or 0)
                 except (OSError, ValueError):
                     owner = 0
-                if owner and _alive(owner):
+                if owner and process_alive(owner):
                     raise RuntimeError(f"experiment is already running (pid {owner})")
                 self.path.unlink(missing_ok=True)
                 continue
@@ -319,16 +320,6 @@ class RunLock:
 
     def __exit__(self, *exc):
         self.path.unlink(missing_ok=True)
-
-
-def _alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
 
 
 def _completed(job_dir: Path, run_id: str, expected_config: dict) -> bool:

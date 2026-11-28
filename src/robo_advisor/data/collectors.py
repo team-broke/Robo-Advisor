@@ -150,6 +150,9 @@ def load_asset_config(path) -> dict:
         config = yaml.safe_load(handle)
     if not isinstance(config, dict) or config.get("schema_version") != 1:
         raise ValueError("Expected asset config schema_version 1")
+    for section in ("collection", "universe", "risk_free_policy"):
+        if not isinstance(config.get(section, {}), dict):
+            raise ValueError(f"{section} must be a mapping")
     collection = config.get("collection", {})
     if collection.get("end_exclusive") is not True:
         raise ValueError("Collection end must be exclusive")
@@ -174,6 +177,7 @@ def load_asset_config(path) -> dict:
     elif universe.get("status") == "confirmed":
         if (
             len(selected) != 12
+            or any(not isinstance(item, str) for item in selected)
             or len(set(selected)) != 12
             or any(
                 item not in by_id
@@ -191,6 +195,8 @@ def load_asset_config(path) -> dict:
         if any(policy.get(key) is not None for key in policy_keys):
             raise ValueError("Unconfirmed risk-free policy must leave decisions unset")
     elif policy.get("status") == "confirmed":
+        if not isinstance(policy.get("selected_dataset"), str):
+            raise ValueError("selected_dataset must be a dataset ID")
         chosen = by_id.get(policy.get("selected_dataset"))
         if (
             chosen is None

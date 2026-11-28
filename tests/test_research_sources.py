@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime, timedelta, timezone
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, quote
 
 import httpx
 import pytest
@@ -136,6 +136,94 @@ def test_dart_pagination_dates_assets_and_redacted_request_logs(clients, configu
     assert result.request_logs[0].robots_allowed is None
     assert all(log.robots_allowed for log in result.request_logs[1:])
     assert all(request.headers["User-Agent"] == "RoboAdvisorResearch/0.1" for request in requests)
+
+
+@pytest.mark.parametrize(
+    "key", ["api_key", "api-key", "API-KEY", "access_token", "access-token", "ACCESS-TOKEN"]
+)
+@pytest.mark.parametrize("secret", ["x", "a+b"])
+def test_secret_key_variants_are_removed_from_public_urls_and_masked_in_logs(
+    clients, caplog, key, secret
+):
+    caplog.set_level(logging.INFO, logger="httpx")
+    requests = []
+
+    def handler(request):
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        requests.append(request)
+        return httpx.Response(200)
+
+    client, _ = clients(handler)
+    url = f"{RSS_URL}?page=2&{key}={quote(secret, safe='')}&lang=ko"
+    assert client.public_url(url) == f"{RSS_URL}?page=2&lang=ko"
+    assert "[redacted]" in client.redact(f"{key}={quote(secret, safe='')}")
+    client.get(url)
+    assert len(requests) == 1
+    assert parse_qs(requests[0].url.query.decode())[key] == [secret]
+    assert client.request_logs[-1].path == "/fixture.xml?page=2&lang=ko"
+    assert f"{key}={quote(secret, safe='')}" not in caplog.text
+    assert "[redacted]" in caplog.text
+    assert "page=2" in caplog.text and "lang=ko" in caplog.text
+
+
+def test_encoded_secret_key_and_registered_secret_are_redacted(clients):
+    client, _ = clients(lambda request: httpx.Response(404))
+    assert client.public_url(f"{RSS_URL}?api%2Dkey=x&topic=markets") == f"{RSS_URL}?topic=markets"
+    assert client.redact("api%2Dkey=x") == "api%2Dkey=[redacted]"
+    client.register_secret("a+b")
+    assert "a+b" not in client.redact("unlabeled a+b")
+    assert "a%2Bb" not in client.redact("unlabeled a%2Bb")
+
+
+@pytest.mark.parametrize("encoded", ["a%2Bb", "a%2bb"])
+def test_registered_secret_masks_percent_escape_case_in_summary_and_http_log(
+    clients, caplog, encoded
+):
+    caplog.set_level(logging.DEBUG, logger="httpx")
+    client, _ = clients(lambda request: httpx.Response(404))
+    client.register_secret("a+b")
+    assert client.redact(f"unlabeled {encoded}") == "unlabeled [redacted]"
+    assert client.safe_summary(f"DART error {encoded}") == "DART error [redacted]"
+    logging.getLogger("httpx").debug("HTTP Request: GET /?note=%s&page=2", encoded)
+    assert encoded not in caplog.text
+    assert "[redacted]" in caplog.text and "page=2" in caplog.text
+
+
+def test_multiple_percent_escapes_preserve_plain_letter_case_and_public_query(clients):
+    client, _ = clients(lambda request: httpx.Response(404))
+    client.register_secret("a+b/c")
+    for encoded in ("a%2Bb%2Fc", "a%2bb%2fc", "a%2Bb%2fc", "a%2bb%2Fc"):
+        assert client.redact(f"value {encoded}") == "value [redacted]"
+    assert client.redact("value A%2bb%2fc") == "value A%2bb%2fc"
+    assert client.public_url(f"{RSS_URL}?page=2&lang=ko") == f"{RSS_URL}?page=2&lang=ko"
+    client.register_secret("x+")
+    assert client.redact("value x+ and x%2b") == "value [redacted] and [redacted]"
+
+
+@pytest.mark.parametrize("key", ["api_key", "api-key", "API-KEY", "access-token", "api%2Dkey"])
+def test_rss_rejects_secret_query_key_variants(key):
+    with pytest.raises(ValidationError) as error:
+        FeedConfig(name="fixture", url=f"{RSS_URL}?{key}=x&page=2")
+    assert f"{key}=x" not in str(error.value)
+    assert FeedConfig(name="fixture", url=f"{RSS_URL}?page=2&lang=ko").url is not None
+
+
+def test_secret_query_is_hidden_in_failed_request_record_and_exception(clients, caplog):
+    caplog.set_level(logging.DEBUG, logger="httpx")
+
+    def handler(request):
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        raise httpx.ReadTimeout("upstream failure", request=request)
+
+    client, _ = clients(handler)
+    with pytest.raises(SourceError) as error:
+        client.get(f"{RSS_URL}?api-key=x&topic=markets")
+    assert error.value.request_logs[-1].path == "/fixture.xml?topic=markets"
+    assert "api-key" not in repr(error.value)
+    assert "api-key" not in repr(error.value.request_logs)
+    assert "api-key=x" not in caplog.text
 
 
 def test_dart_013_empty_and_optional_corp_code(clients, configured_key):

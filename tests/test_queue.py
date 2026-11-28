@@ -202,6 +202,20 @@ def test_live_lock_blocks_and_stale_lock_is_taken_over(tmp_path, base_config):
     assert state["state"] == "completed" and not lock.exists()
 
 
+def test_unknown_pid_lookup_does_not_reclaim_queue_lock(tmp_path, monkeypatch):
+    lock = tmp_path / "lock"
+    lock.write_text("123", encoding="utf-8")
+
+    def unknown(pid):
+        raise OSError("process lookup failed")
+
+    monkeypatch.setattr(queue_module, "process_alive", unknown)
+    with pytest.raises(OSError, match="process lookup failed"):
+        with queue_module.QueueLock(lock):
+            pass
+    assert lock.read_text(encoding="utf-8") == "123"
+
+
 def test_interrupt_marks_queue_and_job(tmp_path, base_config):
     artifacts = tmp_path / "artifacts"
     path = write_queue(tmp_path / "queue.yaml", [{"run_id": "a", "config": "base.yaml"}])
