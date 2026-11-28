@@ -186,3 +186,19 @@ def test_invalid_png_and_unsafe_descriptor_rejected(tmp_path):
     path.write_text(json.dumps(raw))
     with pytest.raises(ValueError, match="unsafe"):
         DashboardArtifacts.load(path, sha256(path.read_bytes()).hexdigest())
+
+
+def test_blank_optional_preload_variables_do_not_disable_configured_dashboard(
+    tmp_path, monkeypatch
+):
+    path, digest, _ = artifact(tmp_path)
+    monkeypatch.setenv("API_CHECKPOINT_SHA256", "")
+    monkeypatch.setenv("API_SHAP_MANIFEST_SHA256", "")
+    monkeypatch.setenv("API_DASHBOARD_MANIFEST", str(path))
+    monkeypatch.setenv("API_DASHBOARD_MANIFEST_SHA256", digest)
+
+    with TestClient(create_app(preload_settings=PreloadSettings(_env_file=None))) as client:
+        health = client.get("/health").json()
+        assert health["services"]["dashboard"] is True
+        assert health["services"]["optimizer"] is False
+        assert client.get("/dashboard/portfolio").status_code == 200
