@@ -111,18 +111,30 @@ def _json_value(value):
     raise FeatureDatasetIOError("Lineage requires finite native JSON values")
 
 
-def _check_lineage(lineage):
+def _check_lineage(lineage, *, prepared_research=False):
     if not isinstance(lineage, dict):
         raise FeatureDatasetIOError("Feature lineage must be a JSON object")
     lineage = _json_value(lineage)
     if lineage.get("training_approved") is not False:
         raise FeatureDatasetIOError("Feature artifacts must explicitly withhold training approval")
-    if lineage.get("dataset_kind") not in {
-        "synthetic_test",
-        "research_only",
-        "validated_research",
-    }:
+    allowed = (
+        {"experimental_real"}
+        if prepared_research
+        else {"synthetic_test", "research_only", "validated_research"}
+    )
+    if lineage.get("dataset_kind") not in allowed:
         raise FeatureDatasetIOError("Dataset kind must distinguish synthetic and research data")
+    if prepared_research:
+        archive = lineage.get("research_archive")
+        validation = lineage.get("validation")
+        if (
+            not isinstance(archive, dict)
+            or not isinstance(archive.get("lineage_sha256"), str)
+            or not _DIGEST.fullmatch(archive["lineage_sha256"])
+            or not isinstance(validation, dict)
+            or validation.get("status") != "unverified"
+        ):
+            raise FeatureDatasetIOError("Prepared research requires unverified, pinned ancestry")
     if type(lineage.get("schema_version")) is not int or lineage["schema_version"] != 1:
         raise FeatureDatasetIOError("Unsupported feature lineage schema")
     if (
@@ -263,11 +275,19 @@ def write_feature_dataset(result, root, *, dataset_id=None) -> Path:
     completion marker; incomplete directories cannot be read as complete outputs.
     A new UTC/UUID ID is generated only when ``dataset_id`` is omitted.
     """
+    return _write_feature_dataset(result, root, dataset_id, prepared_research=False)
+
+
+def _write_prepared_research(result, root, *, dataset_id=None):
+    return _write_feature_dataset(result, root, dataset_id, prepared_research=True)
+
+
+def _write_feature_dataset(result, root, dataset_id, *, prepared_research):
     frames = getattr(result, "frames", None)
     _check_frame_keys(frames)
     if any(not isinstance(frame, pd.DataFrame) for frame in frames.values()):
         raise FeatureDatasetIOError("Every feature frame must be a pandas DataFrame")
-    lineage = _check_lineage(getattr(result, "lineage", None))
+    lineage = _check_lineage(getattr(result, "lineage", None), prepared_research=prepared_research)
     if "artifact" in lineage:
         raise FeatureDatasetIOError("The artifact lineage field is reserved for storage")
     _check_declared_frames(frames, lineage)
@@ -380,6 +400,19 @@ def read_feature_dataset(path, *, expected_lineage_sha256=None) -> dict:
     lineage. Internal checks alone detect accidental changes, not a coordinated
     rewrite of both payloads and their digests.
     """
+    return _read_feature_dataset(path, expected_lineage_sha256, prepared_research=False)
+
+
+def read_prepared_research_dataset(path, *, expected_lineage_sha256) -> dict:
+    """Read an audit-derived artifact for research inspection, separate from PPO input."""
+    if not isinstance(expected_lineage_sha256, str) or not _DIGEST.fullmatch(
+        expected_lineage_sha256
+    ):
+        raise FeatureDatasetIOError("Prepared research requires a trusted lineage SHA-256")
+    return _read_feature_dataset(path, expected_lineage_sha256, prepared_research=True)
+
+
+def _read_feature_dataset(path, expected_lineage_sha256, *, prepared_research):
     root = Path(path).absolute()
     if root.name == "lineage.json":
         root = root.parent
@@ -404,7 +437,7 @@ def read_feature_dataset(path, *, expected_lineage_sha256=None) -> dict:
         )
     except (UnicodeError, json.JSONDecodeError, ValueError) as exc:
         raise FeatureDatasetIOError("Invalid feature lineage JSON") from exc
-    lineage = _check_lineage(lineage)
+    lineage = _check_lineage(lineage, prepared_research=prepared_research)
     artifact = _check_artifact(lineage, root)
     expected_files = {"lineage.json"}
     payloads = {}

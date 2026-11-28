@@ -599,13 +599,8 @@ def _recompute(frames, prices, groups, kinds, report):
     report["metrics"]["source_price_recomputation"] = "checked"
 
 
-def audit_feature_artifact(path, *, expected_lineage_sha256, prices_krw=None) -> dict:
-    """Inspect hashes, chronology, Train scalers and optional source arithmetic.
-
-    A None digest records the missing external trust anchor. Source prices must
-    contain every row-metadata date, including warmup. Passing numerical checks
-    never verifies the truth of financial source evidence or grants approval.
-    """
+def _inspect_feature_artifact(path, expected_lineage_sha256, prices_krw):
+    frames, lineage, experimental = None, None, False
     report = {"status": "unverified", "training_approved": False, "issues": [], "metrics": {}}
     try:
         frames, lineage, experimental = _load(path, expected_lineage_sha256, report)
@@ -640,4 +635,35 @@ def audit_feature_artifact(path, *, expected_lineage_sha256, prices_krw=None) ->
             _recompute(frames, prices_krw, groups, kinds, report)
     except (OSError, ValueError, TypeError, OverflowError) as exc:
         _issue(report, "FEATURE_ARTIFACT_INVALID", str(exc))
-    return _finish(report)
+    return _finish(report), frames, lineage, experimental
+
+
+def audit_feature_artifact(path, *, expected_lineage_sha256, prices_krw=None) -> dict:
+    """Inspect hashes, chronology, Train scalers and optional source arithmetic.
+
+    A None digest records the missing external trust anchor. Source prices must
+    contain every row-metadata date, including warmup. Passing numerical checks
+    never verifies source evidence or grants approval.
+    """
+    return _inspect_feature_artifact(path, expected_lineage_sha256, prices_krw)[0]
+
+
+def read_audited_research_archive(path, *, expected_lineage_sha256):
+    """Read the pinned archived experimental format after the existing feature audit."""
+    if not isinstance(expected_lineage_sha256, str) or not _DIGEST.fullmatch(
+        expected_lineage_sha256
+    ):
+        raise ValueError("Archived research requires a trusted lineage SHA-256")
+    report, frames, lineage, experimental = _inspect_feature_artifact(
+        path, expected_lineage_sha256, None
+    )
+    if report["status"] == "failed":
+        errors = [
+            f"{issue['code']}: {issue['message']}"
+            for issue in report["issues"]
+            if issue["severity"] == "error"
+        ]
+        raise ValueError(f"Archived feature audit failed: {'; '.join(errors)}")
+    if not experimental or lineage.get("validation_status") != "unverified":
+        raise ValueError("Expected an unverified experimental research archive")
+    return frames, lineage
