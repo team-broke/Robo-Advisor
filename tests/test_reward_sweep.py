@@ -13,6 +13,7 @@ from pydantic import ValidationError
 from robo_advisor.config import Settings
 from robo_advisor.experiments import reward_sweep as sweep
 from robo_advisor.rl import training
+from robo_advisor.rl.training_gate import register_synthetic_test_fixture
 from robo_advisor.rl.evaluation import EvaluationResult
 
 
@@ -24,6 +25,7 @@ def setup(tmp_path, monkeypatch):
     returns = pd.DataFrame(0.001, index=dates, columns=["A", "B"])
     for name, frame in (("returns", returns), ("rsi", returns * 0 + 50), ("macd", returns * 0)):
         frame.to_parquet(directory / f"{name}.parquet")
+    register_synthetic_test_fixture(directory)
     settings = Settings(
         _env_file=None,
         models_dir=tmp_path / "models",

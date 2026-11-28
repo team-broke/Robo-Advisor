@@ -8,6 +8,7 @@ import pytest
 
 from robo_advisor.config import Settings
 from robo_advisor.rl import progress, train, training
+from robo_advisor.rl.training_gate import register_synthetic_test_fixture
 
 
 def write_dataset(directory, periods=24):
@@ -17,6 +18,7 @@ def write_dataset(directory, periods=24):
     returns = pd.DataFrame(values, index=index, columns=["A", "B"])
     for name, frame in (("returns", returns), ("rsi", returns * 0 + 50), ("macd", returns * 0)):
         frame.to_parquet(directory / f"{name}.parquet")
+    register_synthetic_test_fixture(directory)
 
 
 def payload(directory, validation=False):

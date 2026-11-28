@@ -12,6 +12,7 @@ from stable_baselines3 import PPO
 
 from robo_advisor.config import Settings
 from robo_advisor.rl import training, validation
+from robo_advisor.rl.training_gate import register_synthetic_test_fixture
 from robo_advisor.rl.evaluation import EvaluationResult
 
 PERIODS = 40
@@ -24,6 +25,7 @@ def write_dataset(directory):
     returns = pd.DataFrame(values, index=index, columns=["A", "B"])
     for name, frame in (("returns", returns), ("rsi", returns * 0 + 50), ("macd", returns * 0)):
         frame.to_parquet(directory / f"{name}.parquet")
+    register_synthetic_test_fixture(directory)
     return index
 
 
@@ -130,6 +132,7 @@ def test_poisoned_validation_rows_do_not_change_training(dataset):
         frame = pd.read_parquet(path)
         frame.loc[frame.index >= start] = 0.5
         frame.to_parquet(path)
+    register_synthetic_test_fixture(dataset)
     poisoned = training.run_training(config(dataset), run_id="poisoned", smoke=True)
     for name, value in clean.model.policy.state_dict().items():
         assert torch.equal(value, poisoned.model.policy.state_dict()[name])

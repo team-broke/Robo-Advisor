@@ -14,6 +14,7 @@ from stable_baselines3 import PPO
 from robo_advisor.backtest import retrain
 from robo_advisor.config import Settings
 from robo_advisor.rl import training
+from robo_advisor.rl.training_gate import register_synthetic_test_fixture
 
 
 @pytest.fixture
@@ -28,6 +29,7 @@ def setup(tmp_path, monkeypatch):
     returns.to_parquet(directory / "returns.parquet")
     (returns * 0 + 50).to_parquet(directory / "rsi.parquet")
     (returns * 0).to_parquet(directory / "macd.parquet")
+    register_synthetic_test_fixture(directory)
     settings = Settings(
         _env_file=None, models_dir=tmp_path / "models", artifacts_dir=tmp_path / "artifacts"
     )

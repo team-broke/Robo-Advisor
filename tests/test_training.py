@@ -14,6 +14,7 @@ from stable_baselines3 import PPO
 
 from robo_advisor.config import Settings
 from robo_advisor.rl import train, training
+from robo_advisor.rl.training_gate import register_synthetic_test_fixture
 from robo_advisor.schemas.risk import RiskTag
 
 
@@ -35,6 +36,7 @@ def write_dataset(directory):
         trace_id="training-test",
     ).model_dump(mode="json")
     pd.DataFrame([tag]).to_parquet(directory / "risk_tags.parquet")
+    register_synthetic_test_fixture(directory)
     return index
 
 
@@ -144,6 +146,9 @@ def test_manifest_records_resolved_run(trained):
     first, second, _, cfg, _ = trained
     manifest = json.loads(first.manifest_path.read_text())
     assert manifest["status"] == "completed"
+    assert manifest["training_approved"] is False
+    assert manifest["research_use"] is False
+    assert manifest["input_gate"]["kind"] == "synthetic_test"
     assert manifest["run_id"] == "first"
     assert manifest["seed"] == 42
     assert manifest["env_seeds"] == [42, 43]
@@ -204,6 +209,7 @@ def test_post_cutoff_poison_does_not_change_training_or_observations(dataset):
     pd.concat([tags, pd.DataFrame([future])], ignore_index=True).to_parquet(
         dataset / "risk_tags.parquet"
     )
+    register_synthetic_test_fixture(dataset)
     after = training.load_training_dataset(cfg.data)
     assert before.risk_tags == after.risk_tags
     for name in ("returns", "rsi", "macd"):
@@ -302,13 +308,21 @@ def test_cuda_selection_requires_available_device(monkeypatch):
 
 def test_cli_overrides_are_validated_and_forwarded(dataset, tmp_path, monkeypatch):
     path = tmp_path / "training.yaml"
+    spec = tmp_path / "preflight.json"
+    spec.write_text(json.dumps({"kind": "research"}))
     raw = payload(tmp_path / "unused")
     raw["total_timesteps"] = 100000
     path.write_text(yaml.safe_dump(raw))
     captured = {}
 
-    def capture(cfg, *, run_id, smoke, log_interval):
-        captured.update(config=cfg, run_id=run_id, smoke=smoke, log_interval=log_interval)
+    def capture(cfg, *, run_id, smoke, log_interval, preflight_spec):
+        captured.update(
+            config=cfg,
+            run_id=run_id,
+            smoke=smoke,
+            log_interval=log_interval,
+            preflight_spec=preflight_spec,
+        )
         return training.TrainingResult(None, Path("final.zip"), Path("manifest.json"), ())
 
     monkeypatch.setattr(train, "run_training", capture)
@@ -325,6 +339,8 @@ def test_cli_overrides_are_validated_and_forwarded(dataset, tmp_path, monkeypatc
             "--run-id",
             "cli",
             "--smoke",
+            "--preflight-spec",
+            str(spec),
         ]
     )
     assert captured["config"].data.dataset_dir == dataset
@@ -332,6 +348,7 @@ def test_cli_overrides_are_validated_and_forwarded(dataset, tmp_path, monkeypatc
     assert captured["config"].total_timesteps == 128
     assert captured["run_id"] == "cli" and captured["smoke"]
     assert captured["log_interval"] == 30.0
+    assert captured["preflight_spec"] == str(spec)
     with pytest.raises(ValidationError):
         training.load_training_config(path, total_timesteps=128)
 
@@ -423,3 +440,30 @@ def test_existing_artifact_directory_also_blocks_run(dataset):
     with pytest.raises(FileExistsError):
         training.run_training(config(dataset), run_id="reserved", smoke=True)
     assert not (settings.models_dir / "reserved").exists()
+
+
+def test_registered_synthetic_fixture_change_blocks_before_environment(dataset, monkeypatch):
+    path = dataset / "returns.parquet"
+    frame = pd.read_parquet(path)
+    frame.iloc[0, 0] += 0.01
+    frame.to_parquet(path)
+    monkeypatch.setattr(training, "_make_env", lambda *a, **kw: pytest.fail("environment created"))
+    with pytest.raises(ValueError, match="bytes changed after registration"):
+        training.run_training(config(dataset), run_id="changed-fixture", smoke=True)
+    settings = training.get_settings()
+    assert not (settings.models_dir / "changed-fixture").exists()
+    assert not (settings.artifacts_dir / "training" / "changed-fixture").exists()
+
+
+def test_invalid_synthetic_asset_order_fails_preflight_before_environment(dataset, monkeypatch):
+    path = dataset / "rsi.parquet"
+    frame = pd.read_parquet(path)
+    frame[frame.columns[::-1]].to_parquet(path)
+    with pytest.raises(ValueError, match="asset order must match"):
+        register_synthetic_test_fixture(dataset)
+    monkeypatch.setattr(training, "_make_env", lambda *a, **kw: pytest.fail("environment created"))
+    with pytest.raises(ValueError, match="asset order must match"):
+        training.run_training(config(dataset), run_id="invalid-order", smoke=True)
+    settings = training.get_settings()
+    assert not (settings.models_dir / "invalid-order").exists()
+    assert not (settings.artifacts_dir / "training" / "invalid-order").exists()

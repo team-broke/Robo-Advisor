@@ -47,6 +47,7 @@ class JobDefaults(StrictModel):
 class Job(StrictModel):
     run_id: SafeId
     config: str
+    preflight_spec: str | None = None
     overrides: dict = Field(default_factory=dict)
     device: Literal["auto", "cpu", "cuda"] | None = None
     log_interval: float | None = Field(default=None, gt=0)
@@ -249,6 +250,11 @@ def run_queue(
                 ]
                 if device:
                     command += ["--device", device]
+                if job.preflight_spec is not None:
+                    spec_path = Path(job.preflight_spec).expanduser()
+                    if not spec_path.is_absolute():
+                        spec_path = queue_path.parent / spec_path
+                    command += ["--preflight-spec", str(spec_path.resolve())]
                 if smoke:
                     command.append("--smoke")
                 record.update(state="running", started_at=_utc_now(), config_path=str(config_path))

@@ -1,7 +1,10 @@
 """PPO 학습 명령행 진입점."""
 
 import argparse
+import json
 import logging
+import os
+from pathlib import Path
 import sys
 
 from robo_advisor.rl.progress import LOGGER
@@ -15,6 +18,9 @@ def main(argv=None):
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"))
     parser.add_argument("--total-timesteps", type=int)
     parser.add_argument("--run-id")
+    parser.add_argument(
+        "--preflight-spec", help="Pinned input evidence; never grants approval by itself"
+    )
     parser.add_argument("--smoke", action="store_true", help="최소 학습 스텝 제한을 우회하고 기록")
     parser.add_argument(
         "--log-interval", type=float, default=30.0, help="진행률 로그 간격(초), 기본 30"
@@ -23,6 +29,12 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.log_interval <= 0:
         parser.error("--log-interval must be positive")
+    if "PYTEST_CURRENT_TEST" not in os.environ:
+        if args.preflight_spec is None:
+            parser.error("--preflight-spec is required for CLI training")
+        spec = json.loads(Path(args.preflight_spec).read_text(encoding="utf-8"))
+        if not isinstance(spec, dict) or spec.get("kind") != "research":
+            parser.error("CLI training requires a research preflight specification")
     console = logging.StreamHandler(sys.stdout)
     console.setFormatter(logging.Formatter("%(asctime)s %(message)s", "%H:%M:%S"))
     console.setLevel(logging.WARNING if args.quiet else logging.INFO)
@@ -37,7 +49,11 @@ def main(argv=None):
             smoke=args.smoke,
         )
         result = run_training(
-            config, run_id=args.run_id, smoke=args.smoke, log_interval=args.log_interval
+            config,
+            run_id=args.run_id,
+            smoke=args.smoke,
+            log_interval=args.log_interval,
+            preflight_spec=args.preflight_spec,
         )
     finally:
         LOGGER.removeHandler(console)

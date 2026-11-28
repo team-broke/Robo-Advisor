@@ -1,0 +1,5 @@
+# Reviewed research-only PPO inputs. Changes to this file require repository review.
+# No financial dataset is permitted until the team records its exact input hashes,
+# training interval, review reference, and unresolved source limitations.
+schema_version: 1
+research_datasets: []

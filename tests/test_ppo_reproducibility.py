@@ -24,6 +24,7 @@ from robo_advisor.ops.ppo_reproducibility import (
     verify_run,
 )
 from robo_advisor.rl import training
+from robo_advisor.rl.training_gate import register_synthetic_test_fixture
 from tests import test_feature_dataset as feature_tests
 
 
@@ -59,6 +60,7 @@ def inputs(tmp_path):
         path = f"data/{name}"
         pd.DataFrame(value, index=dates, columns=assets).to_parquet(root / path)
         files[name] = _pin(root, path)
+    register_synthetic_test_fixture(root / "data")
     config = {
         "seed": 42,
         "device": "cpu",
@@ -152,7 +154,11 @@ def _add_run(root, spec, monkeypatch):
     config = training.load_training_config(
         root / spec["training_config"]["path"], dataset_dir=root / "data", smoke=True
     )
-    training.run_training(config, run_id=run_id, smoke=True)
+    preflight = None
+    if spec.get("kind") == "synthetic":
+        preflight = root / "preflight.json"
+        preflight.write_bytes(json_bytes(spec))
+    training.run_training(config, run_id=run_id, smoke=True, preflight_spec=preflight)
     run = f"artifacts/training/{run_id}"
     spec.update(
         run_id=run_id,
@@ -503,6 +509,7 @@ def test_checkpoint_from_another_run_with_reused_id_is_rejected(completed, tmp_p
     returns = foreign / "data" / "returns.parquet"
     frame = pd.read_parquet(returns)
     (-frame).to_parquet(returns)
+    register_synthetic_test_fixture(foreign / "data")
     _add_run(foreign, foreign_spec, monkeypatch)
     foreign_model = foreign / foreign_spec["checkpoint"]["path"]
     bad = deepcopy(spec)

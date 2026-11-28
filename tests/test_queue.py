@@ -88,15 +88,23 @@ def test_invalid_queue_files(tmp_path, payload):
 
 def test_runs_in_order_with_merged_configs_and_state(tmp_path, base_config):
     artifacts = tmp_path / "artifacts"
+    preflight = tmp_path / "preflight.json"
+    preflight.write_text(json.dumps({"kind": "research"}))
     path = write_queue(
         tmp_path / "queue.yaml",
         [
-            {"run_id": "a", "config": "base.yaml", "overrides": {"total_timesteps": 200000}},
+            {
+                "run_id": "a",
+                "config": "base.yaml",
+                "preflight_spec": str(preflight),
+                "overrides": {"total_timesteps": 200000},
+            },
             {
                 "run_id": "b",
                 "config": str(base_config),
                 "overrides": {"ppo": {"net_arch": {"pi": [64]}}},
                 "device": "cpu",
+                "preflight_spec": "preflight.json",
                 "smoke": True,
                 "after": ["echo {run_id} {artifact_dir}"],
             },
@@ -111,7 +119,9 @@ def test_runs_in_order_with_merged_configs_and_state(tmp_path, base_config):
     assert first[:3] == ["py", "-m", "robo_advisor.rl.train"]
     assert first[first.index("--device") + 1] == "cuda" and "--smoke" not in first
     assert first[first.index("--log-interval") + 1] == "15.0"
+    assert first[first.index("--preflight-spec") + 1] == str(preflight.resolve())
     assert second[second.index("--device") + 1] == "cpu" and "--smoke" in second
+    assert second[second.index("--preflight-spec") + 1] == str(preflight.resolve())
     assert hook == f"echo b {artifacts / 'training' / 'b'}"
     config_a = yaml.safe_load(Path(state["jobs"][0]["config_path"]).read_text())
     assert config_a["total_timesteps"] == 200000 and config_a["ppo"]["n_steps"] == 512
@@ -227,7 +237,7 @@ def test_status_cli(tmp_path, base_config, capsys):
     assert "nightly: completed" in out and "completed a" in out
 
 
-def test_end_to_end_real_training_subprocess_writes_status(tmp_path):
+def test_end_to_end_unreviewed_training_subprocess_is_blocked(tmp_path):
     data = tmp_path / "data"
     data.mkdir()
     index = pd.date_range("2026-01-01", periods=20, tz="UTC")
@@ -266,11 +276,24 @@ def test_end_to_end_real_training_subprocess_writes_status(tmp_path):
         **os.environ,
         "ARTIFACTS_DIR": str(artifacts),
         "MODELS_DIR": str(tmp_path / "models"),
+        "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")
+        + os.pathsep
+        + os.environ.get("PYTHONPATH", ""),
     }
+    imported = subprocess.check_output(
+        [sys.executable, "-c", "import robo_advisor.rl.train as module; print(module.__file__)"],
+        env=env,
+        text=True,
+    ).strip()
+    assert Path(imported).resolve() == (
+        Path(__file__).resolve().parents[1] / "src/robo_advisor/rl/train.py"
+    )
+    assert "PYTEST_CURRENT_TEST" in env
     state = queue_module.run_queue(path, artifacts_dir=artifacts, python=sys.executable, env=env)
-    assert state["state"] == "completed", (artifacts / "queue/nightly/logs/e2e.log").read_text()
-    status = json.loads((artifacts / "training/e2e/status.json").read_text())
-    assert status["schema_version"] == 1 and status["run_id"] == "e2e"
-    assert status["state"] == "completed" and status["progress"] == 1.0
-    assert status["eta_seconds"] is None and status["validation"] is None
-    assert status["episodes"]["count_total"] >= 0
+    log = (artifacts / "queue/nightly/logs/e2e.log").read_text(encoding="utf-8", errors="replace")
+    assert state["state"] == "failed"
+    assert state["jobs"][0]["state"] == "failed"
+    assert state["jobs"][0]["returncode"] != 0
+    assert "synthetic fixture" in log
+    assert not (artifacts / "training/e2e").exists()
+    assert not (tmp_path / "models/e2e").exists()
