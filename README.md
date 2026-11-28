@@ -38,6 +38,8 @@ docker compose up --build
 지정하지 않은 서비스는 `/health`에서 사유와 함께 미로드로 표시된다. 대시보드 컨테이너는
 `robo_advisor` 패키지 없이 `API_BASE_URL`(`http://api:8000`)로만 API에 접근한다.
 
+Railway 배포는 [docs/railway-deploy.md](docs/railway-deploy.md)를 따른다.
+
 WSL Ubuntu의 NVIDIA GPU 학습 PC에서는 Python 3.10 venv를 활성화한 뒤
 `bash scripts/install_cuda_torch.sh`를 실행한다. 먼저 `requirements.txt`를 설치하고,
 그 파일의 torch 고정 버전을 `torch==<버전>+<cuda>`로 지정해 CUDA 인덱스에서 교체한다.
