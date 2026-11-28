@@ -210,6 +210,20 @@ def test_lock_refuses_live_owner(tmp_path):
     assert not lock.exists()
 
 
+def test_unknown_pid_lookup_does_not_reclaim_retrain_lock(tmp_path, monkeypatch):
+    lock = tmp_path / "run.lock"
+    lock.write_text("123", encoding="utf-8")
+
+    def unknown(pid):
+        raise OSError("process lookup failed")
+
+    monkeypatch.setattr(retrain, "process_alive", unknown)
+    with pytest.raises(OSError, match="process lookup failed"):
+        with retrain.RunLock(lock):
+            pass
+    assert lock.read_text(encoding="utf-8") == "123"
+
+
 def test_equal_weight_policy_puts_no_weight_in_cash():
     logits, _ = retrain.equal_weight_policy(3).predict(None)
     weights = np.exp(logits - logits.max())

@@ -30,6 +30,8 @@ from typing import Annotated, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
+from robo_advisor.process import process_alive
+
 SafeId = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")]
 QUEUE_SCHEMA_VERSION = 1
 
@@ -94,16 +96,6 @@ def _write_json(path: Path, value: dict) -> None:
     temporary.replace(path)
 
 
-def _pid_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
-
-
 class QueueLock:
     """대기열별 잠금 파일. 살아 있는 다른 프로세스가 잡고 있으면 실패한다."""
 
@@ -120,7 +112,7 @@ class QueueLock:
                     owner = int(self.path.read_text().strip() or 0)
                 except (OSError, ValueError):
                     owner = 0
-                if owner and _pid_alive(owner):
+                if owner and process_alive(owner):
                     raise RuntimeError(f"queue is already running (pid {owner})") from None
                 self.path.unlink(missing_ok=True)
                 continue

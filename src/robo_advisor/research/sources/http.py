@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Callable, Literal
-from urllib.parse import parse_qsl, quote, quote_plus, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, quote, quote_plus, unquote_plus, urlencode, urlsplit, urlunsplit
 from urllib.robotparser import RobotFileParser
 
 import httpx
@@ -31,6 +31,13 @@ from robo_advisor.schemas.common import NonEmptyString
 
 ALLOWED_HOSTS = frozenset({"opendart.fss.or.kr", "finance.naver.com"})
 SECRET_KEYS = frozenset({"crtfc_key", "api_key", "access_token", "token", "secret", "key"})
+_NORMALIZED_SECRET_KEYS = frozenset(key.replace("_", "") for key in SECRET_KEYS)
+_QUERY_VALUE = re.compile(r"(?<![\w%])(?P<key>[A-Za-z%][A-Za-z0-9_%-]*)=(?P<value>[^&\s\"'<>]*)")
+
+
+def _is_secret_key(key: str) -> bool:
+    normalized = unquote_plus(key).casefold().replace("_", "").replace("-", "")
+    return normalized in _NORMALIZED_SECRET_KEYS
 
 
 @dataclass(frozen=True)
@@ -216,9 +223,18 @@ class PoliteClient:
     def redact(self, value: str) -> str:
         text = str(value)
         for secret in sorted(self._secrets, key=len, reverse=True):
-            text = text.replace(secret, "[redacted]")
-        pattern = r"(?i)((?:crtfc_key|api_key|access_token|token|secret|key)=)[^&\s\"'<>]+"
-        return re.sub(pattern, r"\1[redacted]", text)
+            if "%" in secret:
+                pattern = re.sub(
+                    r"%[0-9A-Fa-f]{2}", lambda match: f"(?i:{match[0]})", re.escape(secret)
+                )
+                text = re.sub(pattern, "[redacted]", text)
+            else:
+                text = text.replace(secret, "[redacted]")
+
+        def mask(match):
+            return f"{match['key']}=[redacted]" if _is_secret_key(match["key"]) else match[0]
+
+        return _QUERY_VALUE.sub(mask, text)
 
     def safe_summary(self, value: str) -> str:
         return self.redact(clean_text(value))[:SUMMARY_MAX_LENGTH]
@@ -228,9 +244,7 @@ class PoliteClient:
         parts = urlsplit(value)
         if parts.username is not None or parts.password is not None:
             raise SourceError("URL credentials are not allowed")
-        query = [
-            (key, val) for key, val in parse_qsl(parts.query) if key.lower() not in SECRET_KEYS
-        ]
+        query = [(key, val) for key, val in parse_qsl(parts.query) if not _is_secret_key(key)]
         public = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), ""))
         return self.redact(public)
 
@@ -354,7 +368,7 @@ class FeedConfig(BaseModel):
     def naver_finance_only(cls, value):
         try:
             validate_source_url(str(value), host="finance.naver.com")
-            if any(key.lower() in SECRET_KEYS for key, _ in parse_qsl(urlsplit(str(value)).query)):
+            if any(_is_secret_key(key) for key, _ in parse_qsl(urlsplit(str(value)).query)):
                 raise ValueError
         except (SourceError, ValueError):
             raise ValueError("RSS feed must be an allowed public Naver finance URL") from None

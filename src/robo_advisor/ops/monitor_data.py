@@ -4,11 +4,12 @@ from collections import Counter, deque
 from datetime import datetime, timezone
 import json
 import math
-import os
 from pathlib import Path
 import re
 
 import pandas as pd
+
+from robo_advisor.process import process_alive
 
 STALE_SECONDS = 120
 STATE_LABELS = {
@@ -258,15 +259,7 @@ def load_run(artifacts_dir, models_dir, run_id, *, log_lines=100):
 
 def pid_alive(pid) -> bool:
     """같은 컴퓨터에서 해당 프로세스가 살아 있는지 확인만 한다(신호를 보내지 않음)."""
-    if isinstance(pid, bool) or not isinstance(pid, int) or pid <= 0:
-        return False
-    try:
-        os.kill(pid, 0)
-    except (ProcessLookupError, OverflowError):
-        return False
-    except PermissionError:
-        return True
-    return True
+    return process_alive(pid)
 
 
 def list_queues(artifacts_dir, *, stale_seconds=STALE_SECONDS, now=None, alive=pid_alive):
