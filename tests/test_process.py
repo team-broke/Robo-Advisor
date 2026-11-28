@@ -18,7 +18,10 @@ def test_invalid_pid_is_not_probed(pid):
     assert process.process_alive(pid) is False
 
 
-@pytest.mark.parametrize("error,expected", [(ProcessLookupError, False), (PermissionError, True)])
+@pytest.mark.parametrize(
+    "error,expected",
+    [(ProcessLookupError, False), (OverflowError, False), (PermissionError, True)],
+)
 def test_posix_known_errors(monkeypatch, error, expected):
     def fail(pid, signal):
         raise error
