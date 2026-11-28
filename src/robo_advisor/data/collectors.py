@@ -647,17 +647,18 @@ def collect_fred(
         )
     values = []
     for position, value in enumerate(raw[spec.symbol]):
-        if value == ".":
+        # FRED는 결측을 '.' 또는 빈 문자열로 표기한다. 원문은 raw_data에 남는다.
+        if value in {".", ""}:
             values.append(np.nan)
         else:
             try:
                 values.append(float(value))
             except (TypeError, ValueError, OverflowError):
-                values.append(value)
+                values.append(np.nan)
                 issues.append(
                     _issue(
                         "INVALID_RATE_VALUE",
-                        "FRED rate is not a numeric value or '.' missing marker",
+                        "FRED rate is not a numeric value or a missing marker",
                         position=position,
                         value=value,
                     )
